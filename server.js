@@ -88,6 +88,23 @@ function primaryCurrentBlast() {
   return blastStates.groups.currentBlast || blastStates.folderGroups.currentBlast || blastStates.admins.currentBlast || null;
 }
 
+function stopAutomationForMode(db, mode) {
+  const key = blastMode(mode);
+  if (key === "folderGroups") {
+    db.folderGroupSchedulerEnabled = false;
+    db.folderGroupLoopEnabled = false;
+    return "folder grup";
+  }
+  if (key === "admins") {
+    db.adminSchedulerEnabled = false;
+    db.adminLoopEnabled = false;
+    return "kontak";
+  }
+  db.groupSchedulerEnabled = false;
+  db.groupLoopEnabled = false;
+  return "grup";
+}
+
 function readJson(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -1338,12 +1355,16 @@ app.post("/api/send-admins-now", (req, res) => {
 });
 
 app.post("/api/stop-send", (req, res) => {
-  if (!anySending()) return res.json({ ok: true, stopped: false, message: "Tidak ada pengiriman berjalan." });
   blastStates.groups.cancelRequested = true;
   blastStates.folderGroups.cancelRequested = true;
   blastStates.admins.cancelRequested = true;
   const db = readDb();
-  db.lastStatus = "Permintaan stop diterima.";
+  stopAutomationForMode(db, "groups");
+  stopAutomationForMode(db, "folderGroups");
+  stopAutomationForMode(db, "admins");
+  db.lastStatus = anySending()
+    ? "Permintaan stop diterima. Semua jadwal dan loop dimatikan."
+    : "Semua jadwal dan loop dimatikan.";
   addLog(db, db.lastStatus);
   saveDb(db);
   res.json({ ok: true, stopped: true });
@@ -1352,10 +1373,12 @@ app.post("/api/stop-send", (req, res) => {
 app.post("/api/stop-send/:mode", (req, res) => {
   const mode = blastMode(req.params.mode);
   const state = blastState(mode);
-  if (!state.isSending) return res.json({ ok: true, stopped: false, message: `Tidak ada pengiriman ${mode} berjalan.` });
   state.cancelRequested = true;
   const db = readDb();
-  db.lastStatus = `Permintaan stop ${mode} diterima.`;
+  const label = stopAutomationForMode(db, mode);
+  db.lastStatus = state.isSending
+    ? `Permintaan stop ${label} diterima. Jadwal dan loop ${label} dimatikan.`
+    : `Jadwal dan loop ${label} dimatikan.`;
   addLog(db, db.lastStatus);
   saveDb(db);
   res.json({ ok: true, stopped: true });

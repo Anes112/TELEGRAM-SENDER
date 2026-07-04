@@ -754,12 +754,22 @@ bind("sendAdminsNowBtn", async () => {
 
 bind("stopSendBtn", async () => {
   const result = await api("/api/stop-send", { method: "POST", body: "{}" });
+  $("groupSchedulerEnabled").checked = false;
+  $("groupLoopEnabled").checked = false;
+  $("folderGroupSchedulerEnabled").checked = false;
+  $("folderGroupLoopEnabled").checked = false;
+  $("adminSchedulerEnabled").checked = false;
+  $("adminLoopEnabled").checked = false;
   toast(result.stopped ? "Stop diminta." : result.message);
+  await refreshStatus();
 });
 
 bind("stopFolderGroupsBtn", async () => {
   const result = await api("/api/stop-send/folderGroups", { method: "POST", body: "{}" });
+  $("folderGroupSchedulerEnabled").checked = false;
+  $("folderGroupLoopEnabled").checked = false;
   toast(result.stopped ? "Stop folder diminta." : result.message);
+  await refreshStatus();
 });
 
 bind("resetProgressBtn", async () => {
