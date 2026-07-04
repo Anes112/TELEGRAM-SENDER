@@ -29,6 +29,8 @@ const defaultDb = {
   message: "",
   groupMessage: "",
   groupForwardLink: "",
+  folderGroupMessage: "",
+  folderGroupForwardLink: "",
   adminMessage: "",
   defaultIntervalSeconds: 3600,
   groupDefaultIntervalSeconds: 3600,
@@ -103,6 +105,8 @@ function readDb() {
   db.accounts = Array.isArray(db.accounts) ? db.accounts : [];
   db.groupMessage = db.groupMessage ?? db.message ?? "";
   db.groupForwardLink = String(db.groupForwardLink || "");
+  db.folderGroupMessage = db.folderGroupMessage ?? "";
+  db.folderGroupForwardLink = String(db.folderGroupForwardLink || "");
   db.adminMessage = db.adminMessage ?? db.message ?? "";
   db.groupDefaultIntervalSeconds = Number(db.groupDefaultIntervalSeconds ?? db.defaultIntervalSeconds ?? 3600);
   db.folderGroupDefaultIntervalSeconds = Number(db.folderGroupDefaultIntervalSeconds ?? db.groupDefaultIntervalSeconds ?? db.defaultIntervalSeconds ?? 3600);
@@ -685,8 +689,16 @@ function modeConfig(db, mode) {
     mode,
     targetType: isAdmins ? "selectedAdmins" : isFolderGroups ? "selectedFolderGroups" : "selectedGroups",
     label: isAdmins ? "kontak/admin" : isFolderGroups ? "folder grup" : "grup",
-    message: isAdmins ? (db.adminMessage || db.message || "") : (db.groupMessage || db.message || ""),
-    forwardLink: isAdmins ? "" : String(db.groupForwardLink || ""),
+    message: isAdmins
+      ? (db.adminMessage || db.message || "")
+      : isFolderGroups
+        ? (db.folderGroupMessage || "")
+        : (db.groupMessage || db.message || ""),
+    forwardLink: isAdmins
+      ? ""
+      : isFolderGroups
+        ? String(db.folderGroupForwardLink || "")
+        : String(db.groupForwardLink || ""),
     delaySeconds: isAdmins ? db.adminDelaySeconds : isFolderGroups ? db.folderGroupDelaySeconds : db.groupDelaySeconds,
     loopEnabled: isAdmins ? db.adminLoopEnabled : isFolderGroups ? db.folderGroupLoopEnabled : db.groupLoopEnabled,
     senderAccountId: isAdmins
@@ -1250,6 +1262,8 @@ app.post("/api/settings/groups", (req, res) => {
 
 app.post("/api/settings/folder-groups", (req, res) => {
   const db = readDb();
+  db.folderGroupMessage = String(req.body.message || "");
+  db.folderGroupForwardLink = String(req.body.forwardLink || "");
   db.folderGroupSenderAccountId = String(req.body.senderAccountId || db.groupSenderAccountId || "target");
   db.folderGroupDefaultIntervalSeconds = Math.max(5, Number(req.body.defaultIntervalSeconds || db.folderGroupDefaultIntervalSeconds || 3600));
   db.folderGroupDelaySeconds = Math.max(0, Number(req.body.delaySeconds ?? db.folderGroupDelaySeconds ?? 3));

@@ -118,6 +118,8 @@ function notifyNewFailures() {
 function fillFromStatus() {
   $("groupMessage").value = state.status.groupMessage || state.status.message || "";
   $("groupForwardLink").value = state.status.groupForwardLink || "";
+  $("folderGroupMessage").value = state.status.folderGroupMessage || "";
+  $("folderGroupForwardLink").value = state.status.folderGroupForwardLink || "";
   $("adminMessage").value = state.status.adminMessage || state.status.message || "";
   $("groupSenderAccountSelect").value = state.status.groupSenderAccountId || state.status.senderAccountId || "target";
   $("adminSenderAccountSelect").value = state.status.adminSenderAccountId || state.status.senderAccountId || "target";
@@ -194,7 +196,7 @@ function renderStatus() {
   $("scheduleInfo").textContent =
     `Jadwal grup: ${state.status.groupSchedulerEnabled ? "aktif" : "mati"}. Jadwal kontak: ${state.status.adminSchedulerEnabled ? "aktif" : "mati"}. ` +
     `Default grup: ${state.status.groupForwardLink ? "forward channel" : "teks"}. ` +
-    `Jadwal folder: ${state.status.folderGroupSchedulerEnabled ? "aktif" : "mati"}. Loop folder: ${state.status.folderGroupLoopEnabled ? "aktif" : "mati"}. ` +
+    `Default folder: ${state.status.folderGroupForwardLink ? "forward channel" : "teks"}. Jadwal folder: ${state.status.folderGroupSchedulerEnabled ? "aktif" : "mati"}. Loop folder: ${state.status.folderGroupLoopEnabled ? "aktif" : "mati"}. ` +
     `Quiet hours: ${state.status.quietHoursEnabled ? `${state.status.quietHoursStart}-${state.status.quietHoursEnd}` : "mati"}. ` +
     `Watchdog: ${state.status.reconnectWatchdogEnabled !== false ? "aktif" : "mati"}. Retry koneksi: ${state.status.networkRetrySeconds || 300} detik. ` +
     `Loop grup: ${state.status.groupLoopEnabled ? "aktif" : "mati"}. Loop kontak: ${state.status.adminLoopEnabled ? "aktif" : "mati"}. ` +
@@ -609,6 +611,8 @@ bind("saveFolderGroupSettingsBtn", async () => {
   await api("/api/settings/folder-groups", {
     method: "POST",
     body: JSON.stringify({
+      message: $("folderGroupMessage").value,
+      forwardLink: $("folderGroupForwardLink").value,
       senderAccountId: $("folderGroupSenderAccountSelect").value,
       defaultIntervalSeconds: Number($("folderGroupDefaultIntervalSeconds").value),
       delaySeconds: Number($("folderGroupDelaySeconds").value),
@@ -711,6 +715,8 @@ bind("sendFolderGroupsNowBtn", async () => {
   await api("/api/settings/folder-groups", {
     method: "POST",
     body: JSON.stringify({
+      message: $("folderGroupMessage").value,
+      forwardLink: $("folderGroupForwardLink").value,
       senderAccountId: $("folderGroupSenderAccountSelect").value,
       defaultIntervalSeconds: Number($("folderGroupDefaultIntervalSeconds").value),
       delaySeconds: Number($("folderGroupDelaySeconds").value),
