@@ -40,6 +40,28 @@ function fmtDate(value) {
   return value ? new Date(value).toLocaleString() : "-";
 }
 
+function secondsUntil(value) {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return 0;
+  return Math.max(0, Math.ceil((time - Date.now()) / 1000));
+}
+
+function fmtDuration(seconds) {
+  const total = Math.max(0, Number(seconds) || 0);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function countdownText(item) {
+  const seconds = secondsUntil(item.nextRunAt);
+  if (!seconds) return item.nextRunAt ? "siap" : "-";
+  return `sisa ${fmtDuration(seconds)}`;
+}
+
 function activeAccountId() {
   return state.selectedAccountId || $("accountSelect").value || state.status?.activeAccountId || "";
 }
@@ -372,7 +394,11 @@ function progressData(items) {
   const pending = Math.max(0, total - sending - sent - failed);
   const done = sent + failed;
   const percent = total ? Math.round((done / total) * 100) : 0;
-  return { total, sending, sent, failed, pending, done, percent };
+  const nextSeconds = Math.min(...items
+    .filter((item) => item.enabled !== false && item.nextRunAt)
+    .map((item) => secondsUntil(item.nextRunAt))
+    .filter((value) => value > 0));
+  return { total, sending, sent, failed, pending, done, percent, nextSeconds: Number.isFinite(nextSeconds) ? nextSeconds : 0 };
 }
 
 function renderProgressBlock(items, summaryId, barId, listId) {
@@ -384,6 +410,7 @@ function renderProgressBlock(items, summaryId, barId, listId) {
     <span>Gagal: <b>${data.failed}</b></span>
     <span>Belum: <b>${data.pending}</b></span>
     <span>Progress: <b>${data.percent}%</b></span>
+    <span>Next: <b>${data.nextSeconds ? fmtDuration(data.nextSeconds) : "-"}</b></span>
   `;
   $(`${barId}`).querySelector("span").style.width = `${data.percent}%`;
   $(listId).innerHTML = items.length
@@ -398,6 +425,7 @@ function renderProgressBlock(items, summaryId, barId, listId) {
             </div>
             <div>
               <span class="statusPill ${state}">${label}</span>
+              <div class="countdown">next ${escapeHtml(countdownText(item))}</div>
               <div class="targetMeta">${escapeHtml(item.lastStatus || "-")} · ${fmtDate(item.lastRunAt)}</div>
             </div>
           </div>`;
@@ -798,5 +826,8 @@ $("folderGroupIntervals").addEventListener("input", () => { state.intervalsDirty
 $("adminIntervals").addEventListener("input", () => { state.intervalsDirty = true; });
 
 refreshStatus(false).catch((error) => toast(error.message));
-setInterval(() => refreshProgressOnly().catch(() => {}), 1000);
+setInterval(() => refreshProgressOnly().catch(() => {}), 3000);
+setInterval(() => {
+  if (state.status) renderProgress();
+}, 1000);
 setInterval(() => refreshStatus(true).catch(() => {}), 15000);

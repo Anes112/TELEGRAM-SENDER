@@ -69,6 +69,7 @@ button:disabled { opacity: .6; cursor: wait; }
 .statusPill.failed { background: #fde8e8; color: var(--danger); }
 .statusPill.sending { background: #e8f0ff; color: #2556a3; }
 .statusPill.pending { background: #fff3d6; color: #74501a; }
+.countdown { margin-top: 5px; font-size: 12px; font-weight: 700; color: var(--accent); }
 .toast { position: fixed; right: 18px; bottom: 18px; max-width: 420px; padding: 12px 14px; background: #172033; color: #fff; border-radius: 8px; opacity: 0; pointer-events: none; transform: translateY(8px); transition: .2s ease; }
 .toast.show { opacity: 1; transform: translateY(0); }
 @media (max-width: 900px) {
