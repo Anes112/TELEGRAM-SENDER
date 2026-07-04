@@ -1,0 +1,1 @@
+https://github.com/USERNAME/REPO/archive/refs/heads/main.zip

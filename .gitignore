@@ -1,0 +1,11 @@
+data/
+node_modules/
+update-url.txt
+update-script-url.txt
+.env
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc

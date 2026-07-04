@@ -1,0 +1,1 @@
+https://gist.githubusercontent.com/USERNAME/GIST_ID/raw/update.sh

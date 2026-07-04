@@ -1,0 +1,14 @@
+{
+  "name": "telegram-js-user-sender-v2",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Telegram multi-account sender with per-target intervals.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "telegram": "^2.26.22"
+  }
+}
