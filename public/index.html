@@ -4,222 +4,271 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Telegram Sender V2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <h1>Telegram Sender V2</h1>
-      <p>Multi akun, interval per grup/admin, dan scheduler lokal.</p>
+  <div class="appShell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brandMark">TS</div>
+        <div>
+          <strong>Telegram Sender</strong>
+          <span>Control Center V2</span>
+        </div>
+      </div>
+      <nav class="sideNav" aria-label="Navigasi panel">
+        <button class="navItem active" data-view="dashboard">Status Pengiriman</button>
+        <button class="navItem" data-view="folder">Folder Telegram</button>
+        <button class="navItem" data-view="groups">Grup Individual</button>
+        <button class="navItem" data-view="admins">Admin / Owner</button>
+        <button class="navItem" data-view="intervals">Interval Target</button>
+        <button class="navItem" data-view="accounts">Akun Telegram</button>
+        <button class="navItem" data-view="system">Sistem HP</button>
+        <button class="navItem" data-view="logs">Log & Error</button>
+      </nav>
+      <div class="sideFoot">
+        <span>Backend Android / lokal</span>
+        <strong id="statusBadge" class="badge">Loading</strong>
+      </div>
+    </aside>
+
+    <div class="content">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Operations dashboard</p>
+          <h1>Telegram Sender V2</h1>
+          <p>Panel ringan buat pantau akun, target, interval, dan pengiriman.</p>
+        </div>
+        <div id="blastIndicator" class="blastIndicator idle">
+          <div id="blastAvatar" class="blastAvatar">-</div>
+          <div>
+            <div id="blastTitle" class="blastTitle">Tidak sedang blast</div>
+            <div id="blastMeta" class="blastMeta">Idle</div>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="view active" data-view-panel="dashboard">
+          <div class="pageHead">
+            <div>
+              <h2>Status Pengiriman</h2>
+              <p>Countdown, progress, gagal, dan terkirim dipisah per jalur.</p>
+            </div>
+            <button id="resetProgressBtn" class="ghost">Reset progress</button>
+          </div>
+          <div class="progressGrid">
+            <section class="panel progressPanel">
+              <h3>Grup</h3>
+              <div id="groupProgressSummary" class="progressSummary"></div>
+              <div id="groupProgressBar" class="progressBar"><span></span></div>
+              <div id="groupProgressList" class="progressList"></div>
+            </section>
+            <section class="panel progressPanel">
+              <h3>Folder Grup</h3>
+              <div id="folderGroupProgressSummary" class="progressSummary"></div>
+              <div id="folderGroupProgressBar" class="progressBar"><span></span></div>
+              <div id="folderGroupProgressList" class="progressList"></div>
+            </section>
+            <section class="panel progressPanel">
+              <h3>Admin / Owner</h3>
+              <div id="adminProgressSummary" class="progressSummary"></div>
+              <div id="adminProgressBar" class="progressBar"><span></span></div>
+              <div id="adminProgressList" class="progressList"></div>
+            </section>
+          </div>
+          <div class="panel">
+            <h3>Jadwal Aktif</h3>
+            <div id="scheduleInfo" class="info"></div>
+          </div>
+        </section>
+
+        <section class="view" data-view-panel="folder">
+          <div class="pageHead">
+            <div>
+              <h2>Folder Telegram</h2>
+              <p id="folderHint">Detect folder dari akun aktif, pilih folder, lalu simpan grupnya.</p>
+            </div>
+            <button id="detectFoldersBtn">Detect folder akun aktif</button>
+          </div>
+          <section class="panel">
+            <div class="grid4">
+              <label>Folder<select id="folderSelect"></select></label>
+              <label>Pengirim folder<select id="folderGroupSenderAccountSelect"></select></label>
+              <label>Default interval detik<input id="folderGroupDefaultIntervalSeconds" type="number" min="5" step="1"></label>
+              <label>Jeda next folder grup detik<input id="folderGroupDelaySeconds" type="number" min="0" step="1"></label>
+              <label class="checkline"><input id="folderGroupSchedulerEnabled" type="checkbox"> Jadwal folder aktif</label>
+              <label class="checkline"><input id="folderGroupLoopEnabled" type="checkbox"> Loop folder</label>
+            </div>
+            <label>Link post channel folder<input id="folderGroupForwardLink" placeholder="https://t.me/channel_kamu/123"></label>
+            <label>Teks fallback folder<textarea id="folderGroupMessage" placeholder="Dipakai kalau link forward folder kosong dan target tidak punya teks custom"></textarea></label>
+            <div class="listTools">
+              <input id="folderGroupSearch" placeholder="Cari grup di folder">
+              <button id="selectAllFolderGroupsBtn" class="secondary">Centang semua</button>
+              <button id="clearFolderGroupsBtn" class="ghost">Kosongkan</button>
+              <button id="saveFolderGroupsBtn">Simpan grup folder</button>
+            </div>
+            <div class="actions">
+              <button id="saveFolderGroupSettingsBtn">Simpan setting folder</button>
+              <button id="sendFolderGroupsNowBtn" class="secondary">Kirim folder sekarang</button>
+              <button id="stopFolderGroupsBtn" class="danger">Stop folder</button>
+            </div>
+            <div id="folderGroupsList" class="targetList"></div>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="groups">
+          <div class="pageHead">
+            <div>
+              <h2>Grup Individual</h2>
+              <p id="groupHint">Detect grup dari akun aktif, centang target, lalu simpan.</p>
+            </div>
+            <button id="detectGroupsBtn">Detect grup akun aktif</button>
+          </div>
+          <section class="panel">
+            <div class="listTools">
+              <input id="groupSearch" placeholder="Cari grup">
+              <button id="selectAllGroupsBtn" class="secondary">Centang semua</button>
+              <button id="clearGroupsBtn" class="ghost">Kosongkan</button>
+              <button id="saveGroupsBtn">Simpan grup</button>
+            </div>
+            <div id="groupsList" class="targetList"></div>
+          </section>
+          <section class="panel">
+            <h3>Blast Grup - Nomor Pertama</h3>
+            <label>Link post channel default<input id="groupForwardLink" placeholder="https://t.me/channel_kamu/123"></label>
+            <label>Teks default grup<textarea id="groupMessage" placeholder="Dipakai kalau link forward kosong dan target tidak punya teks custom"></textarea></label>
+            <div class="grid4">
+              <label>Pengirim grup<select id="groupSenderAccountSelect"></select></label>
+              <label>Default interval detik<input id="groupDefaultIntervalSeconds" type="number" min="5" step="1"></label>
+              <label>Jeda next grup detik<input id="groupDelaySeconds" type="number" min="0" step="1"></label>
+              <label class="checkline"><input id="groupSchedulerEnabled" type="checkbox"> Jadwal grup aktif</label>
+              <label class="checkline"><input id="groupLoopEnabled" type="checkbox"> Loop grup</label>
+            </div>
+            <div class="actions">
+              <button id="saveGroupSettingsBtn">Simpan setting grup</button>
+              <button id="sendGroupsNowBtn" class="secondary">Kirim grup sekarang</button>
+              <button id="stopSendBtn" class="danger">Stop kirim</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="admins">
+          <div class="pageHead">
+            <div>
+              <h2>Admin / Owner</h2>
+              <p id="adminHint">Detect admin dari grup yang pernah terdeteksi, lalu pilih target kontak.</p>
+            </div>
+            <button id="detectAdminsBtn">Detect admin</button>
+          </div>
+          <section class="panel">
+            <div class="listTools">
+              <input id="adminSearch" placeholder="Cari admin">
+              <button id="selectAllAdminsBtn" class="secondary">Centang semua</button>
+              <button id="selectOwnersBtn" class="secondary">Centang owner saja</button>
+              <button id="clearAdminsBtn" class="ghost">Kosongkan</button>
+              <button id="saveAdminsBtn">Simpan admin</button>
+            </div>
+            <div id="adminsList" class="targetList"></div>
+          </section>
+          <section class="panel">
+            <h3>Blast Kontak / Admin - Nomor Kedua</h3>
+            <label>Teks untuk kontak/admin<textarea id="adminMessage" placeholder="Pesan yang dikirim ke admin/owner/kontak"></textarea></label>
+            <div class="grid4">
+              <label>Pengirim kontak<select id="adminSenderAccountSelect"></select></label>
+              <label>Default interval detik<input id="adminDefaultIntervalSeconds" type="number" min="5" step="1"></label>
+              <label>Jeda next kontak detik<input id="adminDelaySeconds" type="number" min="0" step="1"></label>
+              <label class="checkline"><input id="adminSchedulerEnabled" type="checkbox"> Jadwal kontak aktif</label>
+              <label class="checkline"><input id="adminLoopEnabled" type="checkbox"> Loop kontak</label>
+            </div>
+            <div class="actions">
+              <button id="saveAdminSettingsBtn">Simpan setting kontak</button>
+              <button id="sendAdminsNowBtn" class="secondary">Kirim kontak sekarang</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="intervals">
+          <div class="pageHead">
+            <div>
+              <h2>Interval Target</h2>
+              <p>Atur interval dan teks custom masing-masing target.</p>
+            </div>
+            <button id="saveTargetIntervalsBtn" class="secondary">Simpan interval target</button>
+          </div>
+          <section class="panel">
+            <h3>Interval Grup</h3>
+            <div id="groupIntervals" class="intervalList"></div>
+            <h3>Interval Folder Grup</h3>
+            <div id="folderGroupIntervals" class="intervalList"></div>
+            <h3>Interval Kontak / Admin</h3>
+            <div id="adminIntervals" class="intervalList"></div>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="accounts">
+          <div class="pageHead">
+            <div>
+              <h2>Akun Telegram</h2>
+              <p>Tambahkan akun satu per satu. Setiap akun punya session login sendiri.</p>
+            </div>
+            <button id="saveAccountBtn">Simpan akun</button>
+          </div>
+          <section class="panel">
+            <div class="grid4">
+              <label>Akun aktif<select id="accountSelect"></select></label>
+              <label>Label akun<input id="accountLabel" placeholder="Akun 1"></label>
+              <label>API ID<input id="apiId" placeholder="123456"></label>
+              <label>API Hash<input id="apiHash" placeholder="isi saat tambah/update"></label>
+              <label>Nomor Telegram<input id="phone" placeholder="+62812..."></label>
+            </div>
+            <div class="actions">
+              <button id="newAccountBtn" class="ghost">Akun baru</button>
+              <button id="sendOtpBtn" class="secondary">Kirim OTP</button>
+              <input id="otp" placeholder="Kode OTP">
+              <input id="password" type="password" placeholder="Password 2FA jika ada">
+              <button id="verifyOtpBtn">Login</button>
+            </div>
+            <div id="accountsList" class="miniList"></div>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="system">
+          <div class="pageHead">
+            <div>
+              <h2>Sistem HP / 24 Jam</h2>
+              <p>Pause otomatis saat internet mati, lalu lanjut retry setelah koneksi balik.</p>
+            </div>
+            <button id="saveSystemSettingsBtn">Simpan mode HP</button>
+          </div>
+          <section class="panel">
+            <div class="grid4">
+              <label class="checkline"><input id="quietHoursEnabled" type="checkbox"> Quiet hours aktif</label>
+              <label>Mulai pause<input id="quietHoursStart" type="time"></label>
+              <label>Selesai pause<input id="quietHoursEnd" type="time"></label>
+              <label>Retry koneksi detik<input id="networkRetrySeconds" type="number" min="30" step="10"></label>
+              <label class="checkline"><input id="reconnectWatchdogEnabled" type="checkbox"> Auto reconnect akun</label>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="logs">
+          <div class="pageHead">
+            <div>
+              <h2>Log & Error</h2>
+              <p>Riwayat pengiriman, limit, gagal, dan status backend.</p>
+            </div>
+          </div>
+          <section class="panel">
+            <div id="logList" class="logList"></div>
+          </section>
+        </section>
+      </main>
     </div>
-    <div class="topStatus">
-      <div id="blastIndicator" class="blastIndicator idle">
-        <div id="blastAvatar" class="blastAvatar">-</div>
-        <div>
-          <div id="blastTitle" class="blastTitle">Tidak sedang blast</div>
-          <div id="blastMeta" class="blastMeta">Idle</div>
-        </div>
-      </div>
-      <div id="statusBadge" class="badge">Loading</div>
-    </div>
-  </header>
-
-  <main>
-    <section class="panel">
-      <div class="sectionHead">
-        <div>
-          <h2>Progress Blast</h2>
-          <p>Ringkasan target yang sudah terkirim, gagal, dan belum terkirim.</p>
-        </div>
-        <button id="resetProgressBtn" class="ghost">Reset progress</button>
-      </div>
-      <div class="progressGrid">
-        <div>
-          <h3>Grup</h3>
-          <div id="groupProgressSummary" class="progressSummary"></div>
-          <div id="groupProgressBar" class="progressBar"><span></span></div>
-          <div id="groupProgressList" class="progressList"></div>
-        </div>
-        <div>
-          <h3>Folder Grup</h3>
-          <div id="folderGroupProgressSummary" class="progressSummary"></div>
-          <div id="folderGroupProgressBar" class="progressBar"><span></span></div>
-          <div id="folderGroupProgressList" class="progressList"></div>
-        </div>
-        <div>
-          <h3>Admin / Owner</h3>
-          <div id="adminProgressSummary" class="progressSummary"></div>
-          <div id="adminProgressBar" class="progressBar"><span></span></div>
-          <div id="adminProgressList" class="progressList"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="sectionHead">
-        <div>
-          <h2>Folder Telegram</h2>
-          <p id="folderHint">Detect folder dari akun aktif, pilih folder, lalu simpan grupnya untuk blast khusus folder.</p>
-        </div>
-        <button id="detectFoldersBtn">Detect folder akun aktif</button>
-      </div>
-      <div class="grid4">
-        <label>Folder<select id="folderSelect"></select></label>
-        <label>Pengirim folder<select id="folderGroupSenderAccountSelect"></select></label>
-        <label>Default interval detik<input id="folderGroupDefaultIntervalSeconds" type="number" min="5" step="1"></label>
-        <label>Jeda next folder grup detik<input id="folderGroupDelaySeconds" type="number" min="0" step="1"></label>
-        <label class="checkline"><input id="folderGroupSchedulerEnabled" type="checkbox"> Jadwal folder aktif</label>
-        <label class="checkline"><input id="folderGroupLoopEnabled" type="checkbox"> Loop folder</label>
-      </div>
-      <label>Link post channel folder<input id="folderGroupForwardLink" placeholder="https://t.me/channel_kamu/123"></label>
-      <label>Teks fallback folder<textarea id="folderGroupMessage" placeholder="Dipakai kalau link forward folder kosong dan target tidak punya teks custom"></textarea></label>
-      <div class="listTools">
-        <input id="folderGroupSearch" placeholder="Cari grup di folder">
-        <button id="selectAllFolderGroupsBtn" class="secondary">Centang semua</button>
-        <button id="clearFolderGroupsBtn" class="ghost">Kosongkan</button>
-        <button id="saveFolderGroupsBtn">Simpan grup folder</button>
-      </div>
-      <div class="actions">
-        <button id="saveFolderGroupSettingsBtn">Simpan setting folder</button>
-        <button id="sendFolderGroupsNowBtn" class="secondary">Kirim folder sekarang</button>
-        <button id="stopFolderGroupsBtn" class="danger">Stop folder</button>
-      </div>
-      <div id="folderGroupsList" class="targetList"></div>
-    </section>
-
-    <section class="panel">
-      <div class="sectionHead">
-        <div>
-          <h2>Mode HP / 24 Jam</h2>
-          <p>Pause otomatis saat internet rumah mati, lalu lanjut retry setelah koneksi balik.</p>
-        </div>
-        <button id="saveSystemSettingsBtn">Simpan mode HP</button>
-      </div>
-      <div class="grid4">
-        <label class="checkline"><input id="quietHoursEnabled" type="checkbox"> Quiet hours aktif</label>
-        <label>Mulai pause<input id="quietHoursStart" type="time"></label>
-        <label>Selesai pause<input id="quietHoursEnd" type="time"></label>
-        <label>Retry koneksi detik<input id="networkRetrySeconds" type="number" min="30" step="10"></label>
-        <label class="checkline"><input id="reconnectWatchdogEnabled" type="checkbox"> Auto reconnect akun</label>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="sectionHead">
-        <div>
-          <h2>Akun Telegram</h2>
-          <p>Tambahkan akun satu per satu. Setiap akun punya session login sendiri.</p>
-        </div>
-        <button id="saveAccountBtn">Simpan akun</button>
-      </div>
-      <div class="grid4">
-        <label>Akun aktif<select id="accountSelect"></select></label>
-        <label>Label akun<input id="accountLabel" placeholder="Akun 1"></label>
-        <label>API ID<input id="apiId" placeholder="123456"></label>
-        <label>API Hash<input id="apiHash" placeholder="isi saat tambah/update"></label>
-        <label>Nomor Telegram<input id="phone" placeholder="+62812..."></label>
-      </div>
-      <div class="actions">
-        <button id="newAccountBtn" class="ghost">Akun baru</button>
-        <button id="sendOtpBtn" class="secondary">Kirim OTP</button>
-        <input id="otp" placeholder="Kode OTP">
-        <input id="password" type="password" placeholder="Password 2FA jika ada">
-        <button id="verifyOtpBtn">Login</button>
-      </div>
-      <div id="accountsList" class="miniList"></div>
-    </section>
-
-    <section class="panel">
-      <div class="sectionHead">
-        <div>
-          <h2>Grup</h2>
-          <p id="groupHint">Detect grup dari akun aktif, centang, lalu simpan.</p>
-        </div>
-        <button id="detectGroupsBtn">Detect grup akun aktif</button>
-      </div>
-      <div class="listTools">
-        <input id="groupSearch" placeholder="Cari grup">
-        <button id="selectAllGroupsBtn" class="secondary">Centang semua</button>
-        <button id="clearGroupsBtn" class="ghost">Kosongkan</button>
-        <button id="saveGroupsBtn">Simpan grup</button>
-      </div>
-      <div id="groupsList" class="targetList"></div>
-    </section>
-
-    <section class="panel">
-      <div class="sectionHead">
-        <div>
-          <h2>Admin / Owner</h2>
-          <p id="adminHint">Detect admin dari semua grup yang pernah terdeteksi. Hanya admin/owner yang dicentang lalu disimpan yang akan dikirimi akun pengirim admin.</p>
-        </div>
-        <button id="detectAdminsBtn">Detect admin</button>
-      </div>
-      <div class="listTools">
-        <input id="adminSearch" placeholder="Cari admin">
-        <button id="selectAllAdminsBtn" class="secondary">Centang semua</button>
-        <button id="selectOwnersBtn" class="secondary">Centang owner saja</button>
-        <button id="clearAdminsBtn" class="ghost">Kosongkan</button>
-        <button id="saveAdminsBtn">Simpan admin</button>
-      </div>
-      <div id="adminsList" class="targetList"></div>
-    </section>
-
-    <section class="panel">
-      <h2>Blast Grup - Nomor Pertama</h2>
-      <label>Link post channel default<input id="groupForwardLink" placeholder="https://t.me/channel_kamu/123"></label>
-      <label>Teks default grup<textarea id="groupMessage" placeholder="Dipakai kalau link forward kosong dan target tidak punya teks custom"></textarea></label>
-      <div class="grid4">
-        <label>Pengirim grup<select id="groupSenderAccountSelect"></select></label>
-        <label>Default interval detik<input id="groupDefaultIntervalSeconds" type="number" min="5" step="1"></label>
-        <label>Jeda next grup detik<input id="groupDelaySeconds" type="number" min="0" step="1"></label>
-        <label class="checkline"><input id="groupSchedulerEnabled" type="checkbox"> Jadwal grup aktif</label>
-        <label class="checkline"><input id="groupLoopEnabled" type="checkbox"> Loop grup</label>
-      </div>
-      <div class="actions">
-        <button id="saveGroupSettingsBtn">Simpan setting grup</button>
-        <button id="sendGroupsNowBtn" class="secondary">Kirim grup sekarang</button>
-        <button id="stopSendBtn" class="danger">Stop kirim</button>
-      </div>
-    </section>
-
-    <section class="panel">
-      <h2>Blast Kontak / Admin - Nomor Kedua</h2>
-      <label>Teks untuk kontak/admin<textarea id="adminMessage" placeholder="Pesan yang dikirim ke admin/owner/kontak"></textarea></label>
-      <div class="grid4">
-        <label>Pengirim kontak<select id="adminSenderAccountSelect"></select></label>
-        <label>Default interval detik<input id="adminDefaultIntervalSeconds" type="number" min="5" step="1"></label>
-        <label>Jeda next kontak detik<input id="adminDelaySeconds" type="number" min="0" step="1"></label>
-        <label class="checkline"><input id="adminSchedulerEnabled" type="checkbox"> Jadwal kontak aktif</label>
-        <label class="checkline"><input id="adminLoopEnabled" type="checkbox"> Loop kontak</label>
-      </div>
-      <div class="actions">
-        <button id="saveAdminSettingsBtn">Simpan setting kontak</button>
-        <button id="sendAdminsNowBtn" class="secondary">Kirim kontak sekarang</button>
-      </div>
-      <div id="scheduleInfo" class="info"></div>
-    </section>
-
-    <section class="panel">
-      <div class="sectionHead">
-        <div>
-          <h2>Interval Target</h2>
-          <p>Atur interval masing-masing grup dan kontak/admin secara terpisah.</p>
-        </div>
-        <button id="saveTargetIntervalsBtn" class="secondary">Simpan interval target</button>
-      </div>
-      <h3>Interval Grup</h3>
-      <div id="groupIntervals" class="intervalList"></div>
-      <h3>Interval Folder Grup</h3>
-      <div id="folderGroupIntervals" class="intervalList"></div>
-      <h3>Interval Kontak / Admin</h3>
-      <div id="adminIntervals" class="intervalList"></div>
-    </section>
-
-    <section class="panel">
-      <h2>Log</h2>
-      <div id="logList" class="logList"></div>
-    </section>
-  </main>
+  </div>
 
   <div id="toast" class="toast"></div>
   <script src="/app.js"></script>

@@ -9,6 +9,7 @@ const state = {
   newAccountMode: false,
   selectedAccountId: "",
   selectedFolderId: "",
+  activeView: "dashboard",
   notifiedFailures: new Set(),
   initialStatusLoaded: false,
   intervalsDirty: false
@@ -16,6 +17,23 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 const keyOf = (item) => `${item.accountId}:${item.id}`;
+
+function switchView(view) {
+  state.activeView = view || "dashboard";
+  document.querySelectorAll("[data-view-panel]").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.viewPanel === state.activeView);
+  });
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === state.activeView);
+  });
+}
+
+function initNavigation() {
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    button.addEventListener("click", () => switchView(button.dataset.view));
+  });
+  switchView(state.activeView);
+}
 
 function toast(message) {
   const el = $("toast");
@@ -843,6 +861,7 @@ $("groupIntervals").addEventListener("input", () => { state.intervalsDirty = tru
 $("folderGroupIntervals").addEventListener("input", () => { state.intervalsDirty = true; });
 $("adminIntervals").addEventListener("input", () => { state.intervalsDirty = true; });
 
+initNavigation();
 refreshStatus(false).catch((error) => toast(error.message));
 setInterval(() => refreshProgressOnly().catch(() => {}), 3000);
 setInterval(() => {
