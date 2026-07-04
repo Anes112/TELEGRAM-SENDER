@@ -1386,13 +1386,20 @@ app.post("/api/stop-send/:mode", (req, res) => {
 
 app.post("/api/progress/reset", (req, res) => {
   const db = readDb();
-  db.selectedGroups = db.selectedGroups.map((target) => ({ ...target, lastRunAt: null, lastStatus: "" }));
-  db.selectedFolderGroups = db.selectedFolderGroups.map((target) => ({ ...target, lastRunAt: null, lastStatus: "" }));
-  db.selectedAdmins = db.selectedAdmins.map((target) => ({ ...target, lastRunAt: null, lastStatus: "" }));
-  db.lastStatus = "Progress blast direset.";
+  const resetTarget = (target) => ({ ...target, lastRunAt: null, lastStatus: "", nextRunAt: null });
+  db.selectedGroups = db.selectedGroups.map(resetTarget);
+  db.selectedFolderGroups = db.selectedFolderGroups.map(resetTarget);
+  db.selectedAdmins = db.selectedAdmins.map(resetTarget);
+  db.lastStatus = `Progress blast direset. Grup: ${db.selectedGroups.length}, folder: ${db.selectedFolderGroups.length}, kontak: ${db.selectedAdmins.length}.`;
   addLog(db, db.lastStatus);
   saveDb(db);
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    selectedGroups: db.selectedGroups,
+    selectedFolderGroups: db.selectedFolderGroups,
+    selectedAdmins: db.selectedAdmins,
+    lastStatus: db.lastStatus
+  });
 });
 
 const PORT = Number(process.env.PORT || 5174);

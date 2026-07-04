@@ -773,10 +773,17 @@ bind("stopFolderGroupsBtn", async () => {
 });
 
 bind("resetProgressBtn", async () => {
-  await api("/api/progress/reset", { method: "POST", body: "{}" });
+  const result = await api("/api/progress/reset", { method: "POST", body: "{}" });
+  if (state.status) {
+    state.status.selectedGroups = result.selectedGroups || [];
+    state.status.selectedFolderGroups = result.selectedFolderGroups || [];
+    state.status.selectedAdmins = result.selectedAdmins || [];
+    state.status.lastStatus = result.lastStatus || "";
+  }
   state.notifiedFailures.clear();
   toast("Progress blast direset.");
   await refreshStatus();
+  renderProgress();
 });
 
 $("groupSearch").addEventListener("input", renderTargets);
