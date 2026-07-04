@@ -66,6 +66,7 @@ const blastStates = {
   admins: { isSending: false, cancelRequested: false, currentBlast: null }
 };
 let lastQuietNoticeAt = 0;
+let quietWasActive = false;
 
 function blastMode(mode) {
   if (mode === "folderGroups") return "folderGroups";
@@ -103,6 +104,33 @@ function stopAutomationForMode(db, mode) {
   db.groupSchedulerEnabled = false;
   db.groupLoopEnabled = false;
   return "grup";
+}
+
+function wakeTargets(targets) {
+  return (Array.isArray(targets) ? targets : []).map((target) => (
+    target.enabled === false ? target : { ...target, nextRunAt: null }
+  ));
+}
+
+function wakeActiveModesAfterQuiet(db, reason = "quiet hours selesai") {
+  const touched = [];
+  if (db.groupSchedulerEnabled || db.groupLoopEnabled) {
+    db.selectedGroups = wakeTargets(db.selectedGroups);
+    touched.push("grup");
+  }
+  if (db.folderGroupSchedulerEnabled || db.folderGroupLoopEnabled) {
+    db.selectedFolderGroups = wakeTargets(db.selectedFolderGroups);
+    touched.push("folder grup");
+  }
+  if (db.adminSchedulerEnabled || db.adminLoopEnabled) {
+    db.selectedAdmins = wakeTargets(db.selectedAdmins);
+    touched.push("kontak");
+  }
+  if (touched.length) {
+    db.lastStatus = `${reason}: ${touched.join(", ")} dibangunkan untuk lanjut.`;
+    addLog(db, db.lastStatus);
+  }
+  return touched;
 }
 
 function readJson(file, fallback) {
@@ -774,7 +802,7 @@ async function waitForQuietWindow(mode, source) {
         finishedAt: new Date().toISOString()
       };
     }
-    await cancellableDelay(Math.min(seconds, 60), mode);
+    await cancellableDelay(Math.min(seconds, 5), mode);
     if (state.cancelRequested) return;
   }
 }
@@ -965,8 +993,14 @@ setInterval(async () => {
   try {
     const db = readDb();
     if (isQuietHoursActive(db)) {
+      quietWasActive = true;
       noteQuietPause("jadwal");
       return;
+    }
+    if (quietWasActive) {
+      quietWasActive = false;
+      wakeActiveModesAfterQuiet(db);
+      saveDb(db);
     }
     const jobs = [];
     if (db.groupSchedulerEnabled && dueTargets(db, false, "groups").length) jobs.push(sendTargets("jadwal grup", false, "groups"));
@@ -1309,8 +1343,17 @@ app.post("/api/settings/system", (req, res) => {
   db.quietHoursEnd = normalizeClock(req.body.quietHoursEnd || db.quietHoursEnd || "03:20");
   db.reconnectWatchdogEnabled = Boolean(req.body.reconnectWatchdogEnabled);
   db.networkRetrySeconds = Math.max(30, Number(req.body.networkRetrySeconds || db.networkRetrySeconds || 300));
+  const quietActive = isQuietHoursActive(db);
+  if (!quietActive) {
+    quietWasActive = false;
+    wakeActiveModesAfterQuiet(db, "setting rest disimpan");
+  } else {
+    quietWasActive = true;
+    db.lastStatus = `Setting rest disimpan. Masih pause sampai ${db.quietHoursEnd}.`;
+    addLog(db, db.lastStatus);
+  }
   saveDb(db);
-  res.json({ ok: true });
+  res.json({ ok: true, quietActive, lastStatus: db.lastStatus });
 });
 
 app.post("/api/send-now", async (req, res) => {
