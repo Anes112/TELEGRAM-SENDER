@@ -414,9 +414,13 @@ function groupIdFromInputPeer(peer) {
 
 async function displayGroupFromInputPeer(client, peer, account, knownMap) {
   const id = groupIdFromInputPeer(peer);
-  if (id && knownMap.has(id)) return knownMap.get(id);
+  if (id && knownMap.has(id)) {
+    const known = knownMap.get(id);
+    return known?.type === "Group" || known?.type === "Supergroup" ? known : null;
+  }
   try {
     const entity = await client.getEntity(peer);
+    if (entity?.className === "Channel" && !entity.megagroup) return null;
     return displayGroup(entity, account);
   } catch {
     if (!id) return null;
@@ -574,10 +578,6 @@ async function detectFolders(accountId) {
     const addGroup = (group) => {
       if (group) groups.set(`${group.accountId}:${group.id}`, group);
     };
-
-    if (filter.groups) {
-      for (const group of allGroups) addGroup(group);
-    }
 
     const peers = [
       ...(filter.pinnedPeers || []),
