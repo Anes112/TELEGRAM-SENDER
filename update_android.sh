@@ -22,7 +22,15 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Download update..."
-curl -L "$UPDATE_URL" -o "$TMP_DIR/update.zip"
+if ! curl -fL "$UPDATE_URL" -o "$TMP_DIR/update.zip"; then
+  echo "Gagal download update. Cek update-url.txt, internet, atau repo GitHub."
+  exit 1
+fi
+
+if [ ! -s "$TMP_DIR/update.zip" ]; then
+  echo "File update kosong. Cek update-url.txt."
+  exit 1
+fi
 
 echo "Extract update..."
 unzip -q "$TMP_DIR/update.zip" -d "$TMP_DIR/extract"
