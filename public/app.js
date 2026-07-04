@@ -32,6 +32,18 @@ async function api(path, options = {}) {
   return data;
 }
 
+async function waitJob(jobId, label) {
+  let ticks = 0;
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    ticks += 1;
+    const job = await api(`/api/jobs/${encodeURIComponent(jobId)}`);
+    if (job.status === "done") return job.result || {};
+    if (job.status === "error") throw new Error(job.error || `${label} gagal`);
+    if (ticks % 5 === 0) toast(`${label} masih proses...`);
+  }
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
@@ -513,7 +525,9 @@ bind("verifyOtpBtn", async () => {
 bind("detectGroupsBtn", async () => {
   const accountId = activeAccountId();
   await api("/api/accounts/active", { method: "POST", body: JSON.stringify({ accountId }) });
-  const data = await api(`/api/groups/detect?accountId=${encodeURIComponent(accountId)}`);
+  const started = await api(`/api/groups/detect?async=1&accountId=${encodeURIComponent(accountId)}`);
+  toast("Detect grup dimulai di background.");
+  const data = await waitJob(started.jobId, "Detect grup");
   state.detectedGroups = [
     ...state.detectedGroups.filter((item) => item.accountId !== accountId),
     ...(data.groups || [])
@@ -525,7 +539,9 @@ bind("detectGroupsBtn", async () => {
 bind("detectFoldersBtn", async () => {
   const accountId = activeAccountId();
   await api("/api/accounts/active", { method: "POST", body: JSON.stringify({ accountId }) });
-  const data = await api(`/api/folders/detect?accountId=${encodeURIComponent(accountId)}`);
+  const started = await api(`/api/folders/detect?async=1&accountId=${encodeURIComponent(accountId)}`);
+  toast("Detect folder dimulai di background.");
+  const data = await waitJob(started.jobId, "Detect folder");
   state.detectedFolders = data.folders || [];
   state.selectedFolderId = state.detectedFolders[0]?.id || "";
   state.selectedFolderGroupKeys.clear();
@@ -561,7 +577,9 @@ bind("saveFolderGroupsBtn", async () => {
 });
 
 bind("detectAdminsBtn", async () => {
-  const data = await api("/api/admins/detect");
+  const started = await api("/api/admins/detect?async=1");
+  toast("Detect admin/owner dimulai di background.");
+  const data = await waitJob(started.jobId, "Detect admin");
   state.detectedAdmins = data.admins || [];
   const failed = data.errors?.length ? `, ${data.errors.length} grup gagal` : "";
   toast(`${state.detectedAdmins.length} admin/owner terdeteksi${failed}.`);

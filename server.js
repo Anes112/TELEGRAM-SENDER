@@ -60,6 +60,7 @@ const defaultDb = {
 const clients = new Map();
 const loginStates = new Map();
 const authStatusCache = new Map();
+const jobs = new Map();
 const blastStates = {
   groups: { isSending: false, cancelRequested: false, currentBlast: null },
   folderGroups: { isSending: false, cancelRequested: false, currentBlast: null },
@@ -246,6 +247,22 @@ function addLog(db, text) {
 function accountIdFromPhone(phone) {
   const cleaned = String(phone || "").replace(/[^0-9]/g, "");
   return cleaned ? `acc_${cleaned}` : `acc_${Date.now()}`;
+}
+
+function createJob(label, runner) {
+  const id = `job_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  jobs.set(id, { id, label, status: "running", startedAt: new Date().toISOString(), result: null, error: "" });
+  Promise.resolve()
+    .then(runner)
+    .then((result) => {
+      const job = jobs.get(id);
+      if (job) jobs.set(id, { ...job, status: "done", result, finishedAt: new Date().toISOString() });
+    })
+    .catch((error) => {
+      const job = jobs.get(id);
+      if (job) jobs.set(id, { ...job, status: "error", error: error.message || String(error), finishedAt: new Date().toISOString() });
+    });
+  return jobs.get(id);
 }
 
 function sessionPath(accountId) {
@@ -1091,6 +1108,12 @@ app.get("/api/progress", (req, res) => {
   });
 });
 
+app.get("/api/jobs/:id", (req, res) => {
+  const job = jobs.get(String(req.params.id || ""));
+  if (!job) return res.status(404).json({ error: "Job tidak ditemukan." });
+  res.json(job);
+});
+
 app.post("/api/accounts/save", (req, res) => {
   const db = readDb();
   const phone = String(req.body.phone || "").trim();
@@ -1163,6 +1186,16 @@ app.post("/api/login/finish", async (req, res) => {
 
 app.get("/api/groups/detect", async (req, res) => {
   try {
+    if (req.query.async === "1") {
+      const job = createJob("detect groups", async () => {
+        const groups = await detectGroups(req.query.accountId);
+        const db = readDb();
+        db.knownGroups = mergeTargets(db.knownGroups, groups);
+        saveDb(db);
+        return { groups };
+      });
+      return res.json({ started: true, jobId: job.id });
+    }
     const groups = await detectGroups(req.query.accountId);
     const db = readDb();
     db.knownGroups = mergeTargets(db.knownGroups, groups);
@@ -1175,6 +1208,16 @@ app.get("/api/groups/detect", async (req, res) => {
 
 app.get("/api/folders/detect", async (req, res) => {
   try {
+    if (req.query.async === "1") {
+      const job = createJob("detect folders", async () => {
+        const folders = await detectFolders(req.query.accountId);
+        const db = readDb();
+        db.knownGroups = mergeTargets(db.knownGroups, folders.flatMap((folder) => folder.groups || []));
+        saveDb(db);
+        return { folders };
+      });
+      return res.json({ started: true, jobId: job.id });
+    }
     const folders = await detectFolders(req.query.accountId);
     const db = readDb();
     db.knownGroups = mergeTargets(db.knownGroups, folders.flatMap((folder) => folder.groups || []));
@@ -1231,6 +1274,10 @@ app.post("/api/folders/selected", (req, res) => {
 
 app.get("/api/admins/detect", async (req, res) => {
   try {
+    if (req.query.async === "1") {
+      const job = createJob("detect admins", async () => detectAdmins());
+      return res.json({ started: true, jobId: job.id });
+    }
     res.json(await detectAdmins());
   } catch (error) {
     res.status(400).json({ error: error.message });
