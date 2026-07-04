@@ -1349,6 +1349,18 @@ app.post("/api/stop-send", (req, res) => {
   res.json({ ok: true, stopped: true });
 });
 
+app.post("/api/stop-send/:mode", (req, res) => {
+  const mode = blastMode(req.params.mode);
+  const state = blastState(mode);
+  if (!state.isSending) return res.json({ ok: true, stopped: false, message: `Tidak ada pengiriman ${mode} berjalan.` });
+  state.cancelRequested = true;
+  const db = readDb();
+  db.lastStatus = `Permintaan stop ${mode} diterima.`;
+  addLog(db, db.lastStatus);
+  saveDb(db);
+  res.json({ ok: true, stopped: true });
+});
+
 app.post("/api/progress/reset", (req, res) => {
   const db = readDb();
   db.selectedGroups = db.selectedGroups.map((target) => ({ ...target, lastRunAt: null, lastStatus: "" }));

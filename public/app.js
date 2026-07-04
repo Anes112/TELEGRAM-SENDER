@@ -757,6 +757,11 @@ bind("stopSendBtn", async () => {
   toast(result.stopped ? "Stop diminta." : result.message);
 });
 
+bind("stopFolderGroupsBtn", async () => {
+  const result = await api("/api/stop-send/folderGroups", { method: "POST", body: "{}" });
+  toast(result.stopped ? "Stop folder diminta." : result.message);
+});
+
 bind("resetProgressBtn", async () => {
   await api("/api/progress/reset", { method: "POST", body: "{}" });
   state.notifiedFailures.clear();
