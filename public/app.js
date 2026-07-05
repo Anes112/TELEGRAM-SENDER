@@ -371,6 +371,13 @@ function renderFolders() {
   });
 }
 
+function preselectSavedFolderGroups(accountId) {
+  state.selectedFolderGroupKeys.clear();
+  for (const item of state.status?.selectedFolderGroups || []) {
+    if (!accountId || item.accountId === accountId) state.selectedFolderGroupKeys.add(keyOf(item));
+  }
+}
+
 function intervalRow(item, kind) {
   return `
     <div class="intervalRow" data-kind="${kind}" data-key="${escapeHtml(keyOf(item))}">
@@ -385,11 +392,18 @@ function intervalRowV2(item, kind) {
   const customMessage = kind === "groups" || kind === "folderGroups"
     ? `<textarea class="customMessageInput" placeholder="Teks khusus grup ini. Kosongkan kalau mau forward dari channel default.">${escapeHtml(item.customMessage || "")}</textarea>`
     : "";
+  const activityGate = kind === "groups" || kind === "folderGroups"
+    ? `<div class="targetGateControls">
+        <label class="checkline"><input class="activityGateInput" type="checkbox" ${item.activityGateEnabled ? "checked" : ""}> Gate</label>
+        <input class="activityGateMinInput" type="number" min="1" max="50" step="1" value="${Number(item.activityGateMinMessages || 10)}" title="Minimal chat baru">
+      </div>`
+    : "";
   return `
     <div class="intervalRow" data-kind="${kind}" data-key="${escapeHtml(keyOf(item))}">
       <div><b>${escapeHtml(item.title || item.name)}</b><div class="targetMeta">${escapeHtml(item.accountLabel || item.accountId)} - next: ${fmtDate(item.nextRunAt)}</div></div>
       <input class="intervalInput" type="number" min="5" step="1" value="${Number(item.intervalSeconds || 3600)}">
       <label class="checkline"><input class="enabledInput" type="checkbox" ${item.enabled !== false ? "checked" : ""}> Aktif</label>
+      ${activityGate}
       <div>
         <div class="targetMeta">${escapeHtml(item.lastStatus || "-")} - last: ${fmtDate(item.lastRunAt)}</div>
         ${customMessage}
@@ -418,6 +432,7 @@ function blastState(item) {
   if (String(item.lastStatus || "").startsWith("OK")) return "sent";
   if (String(item.lastStatus || "").startsWith("ERROR")) return "failed";
   if (String(item.lastStatus || "").startsWith("PENDING_RETRY")) return "pending";
+  if (String(item.lastStatus || "").startsWith("WAIT_ACTIVITY")) return "waiting";
   return "pending";
 }
 
@@ -451,7 +466,7 @@ function renderProgressBlock(items, summaryId, barId, listId) {
   $(listId).innerHTML = items.length
     ? items.map((item) => {
         const state = blastState(item);
-        const label = state === "sent" ? "Sudah" : state === "failed" ? "Gagal" : state === "sending" ? "Mengirim" : "Belum";
+        const label = state === "sent" ? "Sudah" : state === "failed" ? "Gagal" : state === "sending" ? "Mengirim" : state === "waiting" ? "Ditahan" : "Belum";
         return `
           <div class="progressItem ${state}">
             <div>
@@ -567,7 +582,7 @@ bind("detectFoldersBtn", async () => {
   const data = await waitJob(started.jobId, "Detect folder");
   state.detectedFolders = data.folders || [];
   state.selectedFolderId = state.detectedFolders[0]?.id || "";
-  state.selectedFolderGroupKeys.clear();
+  preselectSavedFolderGroups(accountId);
   toast(`${state.detectedFolders.length} folder terdeteksi.`);
   renderFolders();
 });
@@ -590,8 +605,8 @@ bind("saveGroupsBtn", async () => {
 
 bind("saveFolderGroupsBtn", async () => {
   const savedMap = new Map((state.status.selectedFolderGroups || []).map((item) => [keyOf(item), item]));
-  const selected = (state.detectedFolders || [])
-    .flatMap((folder) => folder.groups || [])
+  const folderPool = mergeByKey(state.status.selectedFolderGroups || [], (state.detectedFolders || []).flatMap((folder) => folder.groups || []));
+  const selected = folderPool
     .filter((item) => state.selectedFolderGroupKeys.has(keyOf(item)))
     .map((item) => ({ ...savedMap.get(keyOf(item)), ...item }));
   await api("/api/folders/selected", { method: "POST", body: JSON.stringify({ groups: selected }) });
@@ -747,6 +762,8 @@ async function saveIntervals(kind) {
       ...item,
       intervalSeconds: Number(row.querySelector(".intervalInput").value),
       enabled: row.querySelector(".enabledInput").checked,
+      activityGateEnabled: row.querySelector(".activityGateInput")?.checked,
+      activityGateMinMessages: Number(row.querySelector(".activityGateMinInput")?.value || item.activityGateMinMessages || 10),
       customMessage: row.querySelector(".customMessageInput")?.value || "",
       resetNextRun: true
     };

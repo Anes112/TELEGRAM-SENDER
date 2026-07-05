@@ -243,7 +243,9 @@ function normalizeTargets(targets, db) {
     nextRunAt: target.nextRunAt || null,
     lastRunAt: target.lastRunAt || null,
     lastStatus: target.lastStatus || "",
-    customMessage: target.customMessage || ""
+    customMessage: target.customMessage || "",
+    activityGateEnabled: typeof target.activityGateEnabled === "boolean" ? target.activityGateEnabled : null,
+    activityGateMinMessages: target.activityGateMinMessages ? Math.max(1, Math.min(50, Number(target.activityGateMinMessages))) : null
   }));
 }
 
@@ -465,10 +467,22 @@ function groupIdFromInputPeer(peer) {
   return "";
 }
 
+function groupBaseId(id) {
+  const parts = String(id || "").split(":");
+  if (parts[0] === "channel") return `channel:${parts[1]}`;
+  if (parts[0] === "chat") return `chat:${parts[1]}`;
+  return String(id || "");
+}
+
 async function displayGroupFromInputPeer(client, peer, account, knownMap) {
   const id = groupIdFromInputPeer(peer);
   if (id && knownMap.has(id)) {
     const known = knownMap.get(id);
+    return known?.type === "Group" || known?.type === "Supergroup" ? known : null;
+  }
+  const baseId = groupBaseId(id);
+  if (baseId && knownMap.has(baseId)) {
+    const known = knownMap.get(baseId);
     return known?.type === "Group" || known?.type === "Supergroup" ? known : null;
   }
   try {
@@ -610,7 +624,7 @@ async function detectGroups(accountId) {
     const ok = entity && (entity.className === "Chat" || (entity.className === "Channel" && (entity.megagroup || entity.broadcast)));
     if (!ok) continue;
     const item = displayGroup(entity, account);
-    if (item) groups.push(item);
+    if (item) groups.push({ ...item, dialogFolderId: dialog.folderId ? String(dialog.folderId) : "" });
   }
   return groups.sort((a, b) => a.title.localeCompare(b.title));
 }
@@ -619,9 +633,16 @@ async function detectFolders(accountId) {
   const account = getAccount(accountId);
   const client = await ensureAuthorizedClient(account.id);
   const db = readDb();
-  const knownMap = new Map(db.knownGroups.filter((group) => group.accountId === account.id).map((group) => [group.id, group]));
+  const knownMap = new Map();
+  for (const group of db.knownGroups.filter((item) => item.accountId === account.id)) {
+    knownMap.set(group.id, group);
+    knownMap.set(groupBaseId(group.id), group);
+  }
   const allGroups = await detectGroups(account.id);
-  for (const group of allGroups) knownMap.set(group.id, group);
+  for (const group of allGroups) {
+    knownMap.set(group.id, group);
+    knownMap.set(groupBaseId(group.id), group);
+  }
   const result = await client.invoke(new Api.messages.GetDialogFilters());
   const folders = [];
 
@@ -640,9 +661,20 @@ async function detectFolders(accountId) {
       addGroup(await displayGroupFromInputPeer(client, peer, account, knownMap));
     }
 
+    for (const group of allGroups) {
+      if (String(group.dialogFolderId || "") === String(filter.id)) addGroup(group);
+    }
+
+    if (filter.groups) {
+      for (const group of allGroups) {
+        if (group.type === "Group" || group.type === "Supergroup") addGroup(group);
+      }
+    }
+
     const excludeIds = new Set((filter.excludePeers || []).map(groupIdFromInputPeer).filter(Boolean));
+    const excludeBaseIds = new Set(Array.from(excludeIds).map(groupBaseId));
     const folderGroups = Array.from(groups.values())
-      .filter((group) => !excludeIds.has(group.id))
+      .filter((group) => !excludeIds.has(group.id) && !excludeBaseIds.has(groupBaseId(group.id)))
       .sort((a, b) => a.title.localeCompare(b.title))
       .map((group) => ({
         ...group,
@@ -802,12 +834,14 @@ function targetLastRunMs(target) {
 }
 
 async function checkActivityGate(client, target, senderAccountId, config) {
-  if (!config.activityGateEnabled || config.mode === "admins") return { allowed: true };
+  const targetGateEnabled = typeof target.activityGateEnabled === "boolean" ? target.activityGateEnabled : config.activityGateEnabled;
+  if (!targetGateEnabled || config.mode === "admins") return { allowed: true };
   const lastRunAt = targetLastRunMs(target);
   if (!lastRunAt) return { allowed: true };
 
+  const minMessages = Math.max(1, Math.min(50, Number(target.activityGateMinMessages || config.activityGateMinMessages || 10)));
   const peer = peerForSender(target, senderAccountId);
-  const limit = Math.max(40, Math.min(120, config.activityGateMinMessages + 30));
+  const limit = Math.max(40, Math.min(120, minMessages + 30));
   const messages = await client.getMessages(peer, { limit });
   let newMessages = 0;
   let latestAt = 0;
@@ -820,13 +854,13 @@ async function checkActivityGate(client, target, senderAccountId, config) {
     newMessages += 1;
   }
 
-  const allowed = newMessages >= config.activityGateMinMessages;
+  const allowed = newMessages >= minMessages;
   return {
     allowed,
     newMessages,
     latestAt,
-    minMessages: config.activityGateMinMessages,
-    reason: allowed ? "" : `WAIT_ACTIVITY: ${newMessages}/${config.activityGateMinMessages} chat baru setelah blast terakhir`
+    minMessages,
+    reason: allowed ? "" : `WAIT_ACTIVITY: ${newMessages}/${minMessages} chat baru setelah blast terakhir`
   };
 }
 
@@ -912,6 +946,7 @@ async function sendTargets(source, manual = false, forcedMode = null) {
   let cancelled = false;
   try {
     let firstPass = true;
+    const processedManualKeys = new Set();
     while (!state.cancelRequested) {
       const db = readDb();
       const config = modeConfig(db, mode);
@@ -919,9 +954,13 @@ async function sendTargets(source, manual = false, forcedMode = null) {
       const label = config.label;
       const sendDelaySeconds = config.delaySeconds;
       const manualBatch = manual && firstPass;
-      const targets = dueTargets(db, manualBatch, mode);
+      let targets = dueTargets(db, manualBatch, mode);
+      if (manual && !config.loopEnabled) {
+        targets = targets.filter((target) => !processedManualKeys.has(`${target.accountId}:${target.id}`));
+      }
 
       if (!targets.length) {
+        if (manual && !config.loopEnabled && processedManualKeys.size) break;
         if (manual && config.loopEnabled) {
           const waitSeconds = Math.min(secondsUntilNextTarget(db, mode), 30);
           const senderInfo = accountPublicInfo(config.senderAccountId === "target" ? db.activeAccountId : config.senderAccountId);
@@ -963,6 +1002,7 @@ async function sendTargets(source, manual = false, forcedMode = null) {
       }
 
       for (const target of targets) {
+        if (manual && !config.loopEnabled) processedManualKeys.add(`${target.accountId}:${target.id}`);
         await waitForQuietWindow(mode, source);
         if (state.cancelRequested) {
           cancelled = true;
@@ -1052,7 +1092,11 @@ async function sendTargets(source, manual = false, forcedMode = null) {
         }
       }
 
-      if (cancelled || !manual || !config.loopEnabled) break;
+      if (cancelled || !manual) break;
+      if (!config.loopEnabled) {
+        firstPass = false;
+        continue;
+      }
       firstPass = false;
     }
 
@@ -1311,7 +1355,9 @@ app.post("/api/groups/selected", (req, res) => {
     nextRunAt: group.nextRunAt || null,
     lastRunAt: group.lastRunAt || null,
     lastStatus: group.lastStatus || "",
-    customMessage: String(group.customMessage || "")
+    customMessage: String(group.customMessage || ""),
+    activityGateEnabled: typeof group.activityGateEnabled === "boolean" ? group.activityGateEnabled : Boolean(db.groupActivityGateEnabled),
+    activityGateMinMessages: Math.max(1, Math.min(50, Number(group.activityGateMinMessages || db.groupActivityGateMinMessages || 10)))
   }));
   saveDb(db);
   res.json({ ok: true, total: db.selectedGroups.length });
@@ -1334,7 +1380,9 @@ app.post("/api/folders/selected", (req, res) => {
     nextRunAt: group.nextRunAt || null,
     lastRunAt: group.lastRunAt || null,
     lastStatus: group.lastStatus || "",
-    customMessage: String(group.customMessage || "")
+    customMessage: String(group.customMessage || ""),
+    activityGateEnabled: typeof group.activityGateEnabled === "boolean" ? group.activityGateEnabled : Boolean(db.folderGroupActivityGateEnabled),
+    activityGateMinMessages: Math.max(1, Math.min(50, Number(group.activityGateMinMessages || db.folderGroupActivityGateMinMessages || 10)))
   }));
   saveDb(db);
   res.json({ ok: true, total: db.selectedFolderGroups.length });
@@ -1389,6 +1437,8 @@ app.post("/api/targets/update", (req, res) => {
       intervalSeconds: Math.max(5, Number(update.intervalSeconds || target.intervalSeconds)),
       enabled: update.enabled !== false,
       customMessage: String(update.customMessage ?? target.customMessage ?? ""),
+      activityGateEnabled: typeof update.activityGateEnabled === "boolean" ? update.activityGateEnabled : target.activityGateEnabled,
+      activityGateMinMessages: Math.max(1, Math.min(50, Number(update.activityGateMinMessages || target.activityGateMinMessages || 10))),
       nextRunAt: update.resetNextRun ? null : target.nextRunAt
     };
   });

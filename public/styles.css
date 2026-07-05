@@ -376,11 +376,27 @@ button:disabled { opacity: .58; cursor: wait; }
 
 .intervalRow {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 150px 90px minmax(220px, 1.4fr);
+  grid-template-columns: minmax(180px, 1fr) 130px 90px 130px minmax(220px, 1.4fr);
   gap: 10px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
   align-items: center;
+}
+
+.targetGateControls {
+  display: grid;
+  grid-template-columns: 1fr 58px;
+  gap: 8px;
+  align-items: center;
+}
+
+.targetGateControls label {
+  margin-top: 0;
+}
+
+.targetGateControls input[type="number"] {
+  min-height: 34px;
+  padding: 7px 8px;
 }
 
 .miniItem {
@@ -475,6 +491,7 @@ button:disabled { opacity: .58; cursor: wait; }
 .statusPill.failed { background: #fee2e2; color: var(--danger-dark); }
 .statusPill.sending { background: #dbeafe; color: #1d4ed8; }
 .statusPill.pending { background: #fff3d6; color: #925b00; }
+.statusPill.waiting { background: #ede9fe; color: #5b21b6; }
 
 .countdown {
   margin-top: 5px;
