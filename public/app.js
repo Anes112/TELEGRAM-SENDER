@@ -202,6 +202,9 @@ function fillFromStatus() {
   $("quietHoursEnd").value = state.status.quietHoursEnd || "03:20";
   $("networkRetrySeconds").value = state.status.networkRetrySeconds || 300;
   $("reconnectWatchdogEnabled").checked = state.status.reconnectWatchdogEnabled !== false;
+  $("aiActivityAgentEnabled").checked = state.status.aiActivityAgentEnabled !== false;
+  $("groqModel").value = state.status.groqModel || "llama-3.1-8b-instant";
+  $("aiActivityAgentMargin").value = state.status.aiActivityAgentMargin ?? 5;
 }
 
 function renderAccounts(previousAccount) {
@@ -260,6 +263,7 @@ function renderStatus() {
     `Default admin: ${state.status.adminForwardLink ? "forward channel" : "teks"} tiap ${secondsToDays(state.status.adminDefaultIntervalSeconds || 86400)} hari. ` +
     `Default folder: ${state.status.folderGroupForwardLink ? "forward channel" : "teks"}. Jadwal folder: ${state.status.folderGroupSchedulerEnabled ? "aktif" : "mati"}. Loop folder: ${state.status.folderGroupLoopEnabled ? "aktif" : "mati"}. ` +
     `Activity gate grup: ${state.status.groupActivityGateEnabled ? `${state.status.groupActivityGateMinMessages || 10} chat` : "mati"}. Activity gate folder: ${state.status.folderGroupActivityGateEnabled ? `${state.status.folderGroupActivityGateMinMessages || 10} chat` : "mati"}. ` +
+    `AI gate: ${state.status.aiActivityAgentEnabled !== false ? (state.status.groqReady ? "aktif" : "aktif tapi key belum ada") : "mati"}. ` +
     `Quiet hours: ${state.status.quietHoursEnabled ? `${state.status.quietHoursStart}-${state.status.quietHoursEnd}` : "mati"}. ` +
     `Watchdog: ${state.status.reconnectWatchdogEnabled !== false ? "aktif" : "mati"}. Retry koneksi: ${state.status.networkRetrySeconds || 300} detik. ` +
     `Loop grup: ${state.status.groupLoopEnabled ? "aktif" : "mati"}. Loop kontak: ${state.status.adminLoopEnabled ? "aktif" : "mati"}. ` +
@@ -747,7 +751,10 @@ bind("saveSystemSettingsBtn", async () => {
       quietHoursStart: $("quietHoursStart").value,
       quietHoursEnd: $("quietHoursEnd").value,
       networkRetrySeconds: Number($("networkRetrySeconds").value),
-      reconnectWatchdogEnabled: $("reconnectWatchdogEnabled").checked
+      reconnectWatchdogEnabled: $("reconnectWatchdogEnabled").checked,
+      aiActivityAgentEnabled: $("aiActivityAgentEnabled").checked,
+      groqModel: $("groqModel").value,
+      aiActivityAgentMargin: Number($("aiActivityAgentMargin").value)
     })
   });
   toast("Mode HP disimpan.");

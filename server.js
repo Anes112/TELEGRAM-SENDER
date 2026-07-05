@@ -75,6 +75,9 @@ const defaultDb = {
   quietHoursEnd: "03:20",
   reconnectWatchdogEnabled: true,
   networkRetrySeconds: 300,
+  aiActivityAgentEnabled: true,
+  groqModel: "llama-3.1-8b-instant",
+  aiActivityAgentMargin: 5,
   isSendingLabel: "",
   lastStatus: "",
   sendLog: []
@@ -199,6 +202,9 @@ function readDb() {
   db.quietHoursEnd = normalizeClock(db.quietHoursEnd || "03:20");
   db.reconnectWatchdogEnabled = db.reconnectWatchdogEnabled !== false;
   db.networkRetrySeconds = Math.max(30, Number(db.networkRetrySeconds || 300));
+  db.aiActivityAgentEnabled = db.aiActivityAgentEnabled !== false;
+  db.groqModel = String(db.groqModel || "llama-3.1-8b-instant").trim();
+  db.aiActivityAgentMargin = Math.max(0, Math.min(20, Number(db.aiActivityAgentMargin || 5)));
   if (!db.activeAccountId && db.accounts.length) db.activeAccountId = db.accounts[0].id;
   db.knownGroups = normalizeTargets(db.knownGroups, db);
   db.selectedGroups = normalizeTargets(db.selectedGroups, db);
@@ -832,7 +838,11 @@ function modeConfig(db, mode) {
     activityGateEnabled: !isAdmins && (isFolderGroups ? db.folderGroupActivityGateEnabled : db.groupActivityGateEnabled),
     activityGateMinMessages: isFolderGroups
       ? Math.max(1, Math.min(50, Number(db.folderGroupActivityGateMinMessages || 10)))
-      : Math.max(1, Math.min(50, Number(db.groupActivityGateMinMessages || 10)))
+      : Math.max(1, Math.min(50, Number(db.groupActivityGateMinMessages || 10))),
+    aiActivityAgentEnabled: Boolean(db.aiActivityAgentEnabled && process.env.GROQ_API_KEY),
+    groqApiKey: process.env.GROQ_API_KEY || "",
+    groqModel: db.groqModel,
+    aiActivityAgentMargin: db.aiActivityAgentMargin
   };
 }
 
@@ -854,6 +864,83 @@ function targetLastRunMs(target) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function messagePreview(message) {
+  return {
+    id: Number(message.id || 0),
+    out: Boolean(message.out),
+    viaBot: Boolean(message.viaBotId),
+    action: Boolean(message.action),
+    date: message.date ? new Date(telegramDateMs(message.date)).toISOString() : "",
+    text: String(message.message || "").slice(0, 120)
+  };
+}
+
+function parseAiJson(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+}
+
+async function groqActivityReview(config, target, messages, deterministicCount, minMessages) {
+  if (!config.aiActivityAgentEnabled || !config.groqApiKey) return null;
+  if (deterministicCount < Math.max(0, minMessages - Number(config.aiActivityAgentMargin || 0))) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3500);
+  try {
+    const body = {
+      model: config.groqModel || "llama-3.1-8b-instant",
+      temperature: 0,
+      max_tokens: 80,
+      messages: [
+        {
+          role: "system",
+          content: "You are a lightweight validator for Telegram activity gates. Return only JSON."
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: "Decide if this group is active enough to allow the next blast. Count ordinary chat messages after the sender's last blast. Ignore pure service/action events. Bot/forwarded-looking messages still count only if they look like normal chat activity.",
+            target: target.title || target.name || target.id,
+            minimum: minMessages,
+            deterministicCount,
+            messages: messages.slice(0, 60).map(messagePreview),
+            output: { allow: "boolean", validNewMessages: "number", reason: "short Indonesian reason" }
+          })
+        }
+      ]
+    };
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${config.groqApiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const parsed = parseAiJson(data?.choices?.[0]?.message?.content);
+    if (!parsed) return null;
+    const validNewMessages = Math.max(0, Number(parsed.validNewMessages || 0));
+    return {
+      allowed: Boolean(parsed.allow) || validNewMessages >= minMessages,
+      newMessages: validNewMessages,
+      reason: String(parsed.reason || "AI activity review")
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function checkActivityGate(client, target, senderAccountId, config) {
   if (!config.activityGateEnabled) return { allowed: true };
   const targetGateEnabled = target.activityGateEnabled !== false;
@@ -868,6 +955,7 @@ async function checkActivityGate(client, target, senderAccountId, config) {
   const messages = await client.getMessages(peer, { limit });
   let newMessages = 0;
   let latestAt = 0;
+  const candidateMessages = [];
 
   for (const message of messages || []) {
     const messageId = Number(message.id || 0);
@@ -881,16 +969,22 @@ async function checkActivityGate(client, target, senderAccountId, config) {
     if (message.className !== "Message" || message.action) continue;
     const at = telegramDateMs(message.date);
     latestAt = Math.max(latestAt, at);
+    candidateMessages.push(message);
     newMessages += 1;
   }
 
-  const allowed = newMessages >= minMessages;
+  const aiReview = newMessages < minMessages
+    ? await groqActivityReview(config, target, candidateMessages, newMessages, minMessages)
+    : null;
+  const finalMessages = aiReview?.newMessages ?? newMessages;
+  const allowed = newMessages >= minMessages || aiReview?.allowed;
   return {
     allowed,
-    newMessages,
+    newMessages: finalMessages,
     latestAt,
     minMessages,
-    reason: allowed ? "" : `WAIT_ACTIVITY: ${newMessages}/${minMessages} chat baru setelah blast terakhir`
+    reason: allowed ? "" : `WAIT_ACTIVITY: ${finalMessages}/${minMessages} chat baru setelah blast terakhir${aiReview ? " (AI)" : ""}`,
+    aiUsed: Boolean(aiReview)
   };
 }
 
@@ -1091,10 +1185,11 @@ async function sendTargets(source, manual = false, forcedMode = null) {
               target.lastStatus = gate.reason;
               target.nextRunAt = new Date(Date.now() + recheckSeconds * 1000).toISOString();
               delivered = true;
-              saveTargetProgress(targetType, target, `${source}: tahan ${target.name || target.title}, baru ${gate.newMessages}/${gate.minMessages} chat setelah blast terakhir. Cek ulang ${Math.ceil(recheckSeconds / 60)} menit.`);
+              const aiNote = gate.aiUsed ? " via AI" : "";
+              saveTargetProgress(targetType, target, `${source}: tahan ${target.name || target.title}, baru ${gate.newMessages}/${gate.minMessages} chat setelah blast terakhir${aiNote}. Cek ulang ${Math.ceil(recheckSeconds / 60)} menit.`);
               state.currentBlast = {
                 ...state.currentBlast,
-                status: `Ditahan: ${gate.newMessages}/${gate.minMessages} chat baru, cek ulang ${Math.ceil(recheckSeconds / 60)} menit`,
+                status: `Ditahan: ${gate.newMessages}/${gate.minMessages} chat baru${aiNote}, cek ulang ${Math.ceil(recheckSeconds / 60)} menit`,
                 finishedAt: new Date().toISOString()
               };
               await adaptiveDelay(Math.min(sendDelaySeconds, 1), 0, mode);
@@ -1238,6 +1333,7 @@ app.get("/api/status", async (req, res) => {
   res.json({
     ...db,
     accounts,
+    groqReady: Boolean(process.env.GROQ_API_KEY),
     isSending: anySending(),
     currentBlast: primaryCurrentBlast(),
     currentBlasts: {
@@ -1573,6 +1669,9 @@ app.post("/api/settings/system", (req, res) => {
   db.quietHoursEnd = normalizeClock(req.body.quietHoursEnd || db.quietHoursEnd || "03:20");
   db.reconnectWatchdogEnabled = Boolean(req.body.reconnectWatchdogEnabled);
   db.networkRetrySeconds = Math.max(30, Number(req.body.networkRetrySeconds || db.networkRetrySeconds || 300));
+  db.aiActivityAgentEnabled = Boolean(req.body.aiActivityAgentEnabled);
+  db.groqModel = String(req.body.groqModel || db.groqModel || "llama-3.1-8b-instant").trim();
+  db.aiActivityAgentMargin = Math.max(0, Math.min(20, Number(req.body.aiActivityAgentMargin ?? db.aiActivityAgentMargin ?? 5)));
   const quietActive = isQuietHoursActive(db);
   if (!quietActive) {
     quietWasActive = false;
