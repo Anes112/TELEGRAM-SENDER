@@ -15,6 +15,23 @@ const ACTIVITY_GATE_RECHECK_SECONDS = 600;
 fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 fs.mkdirSync(AVATARS_DIR, { recursive: true });
 
+function loadEnvFile() {
+  const file = path.join(ROOT, ".env");
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const index = trimmed.indexOf("=");
+    if (index <= 0) continue;
+    const key = trimmed.slice(0, index).trim();
+    const raw = trimmed.slice(index + 1).trim();
+    const value = raw.replace(/^["']|["']$/g, "");
+    if (key && process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+loadEnvFile();
+
 const defaultDb = {
   accounts: [],
   activeAccountId: "",
