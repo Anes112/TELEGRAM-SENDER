@@ -47,6 +47,10 @@ const defaultDb = {
   groupLoopEnabled: false,
   folderGroupLoopEnabled: false,
   adminLoopEnabled: false,
+  groupActivityGateEnabled: false,
+  folderGroupActivityGateEnabled: false,
+  groupActivityGateMinMessages: 10,
+  folderGroupActivityGateMinMessages: 10,
   quietHoursEnabled: true,
   quietHoursStart: "02:50",
   quietHoursEnd: "03:20",
@@ -166,6 +170,10 @@ function readDb() {
   db.groupLoopEnabled = Boolean(db.groupLoopEnabled);
   db.folderGroupLoopEnabled = Boolean(db.folderGroupLoopEnabled);
   db.adminLoopEnabled = Boolean(db.adminLoopEnabled);
+  db.groupActivityGateEnabled = Boolean(db.groupActivityGateEnabled);
+  db.folderGroupActivityGateEnabled = Boolean(db.folderGroupActivityGateEnabled);
+  db.groupActivityGateMinMessages = Math.max(1, Math.min(50, Number(db.groupActivityGateMinMessages || db.activityGateMinMessages || 10)));
+  db.folderGroupActivityGateMinMessages = Math.max(1, Math.min(50, Number(db.folderGroupActivityGateMinMessages || db.activityGateMinMessages || 10)));
   db.quietHoursEnabled = Boolean(db.quietHoursEnabled);
   db.quietHoursStart = normalizeClock(db.quietHoursStart || "02:50");
   db.quietHoursEnd = normalizeClock(db.quietHoursEnd || "03:20");
@@ -767,13 +775,59 @@ function modeConfig(db, mode) {
       ? (db.adminSenderAccountId || db.senderAccountId || "target")
       : isFolderGroups
         ? (db.folderGroupSenderAccountId || db.groupSenderAccountId || db.senderAccountId || "target")
-      : (db.groupSenderAccountId || db.senderAccountId || "target")
+      : (db.groupSenderAccountId || db.senderAccountId || "target"),
+    activityGateEnabled: !isAdmins && (isFolderGroups ? db.folderGroupActivityGateEnabled : db.groupActivityGateEnabled),
+    activityGateMinMessages: isFolderGroups
+      ? Math.max(1, Math.min(50, Number(db.folderGroupActivityGateMinMessages || 10)))
+      : Math.max(1, Math.min(50, Number(db.groupActivityGateMinMessages || 10)))
   };
 }
 
 function targetPayloadReady(target, config) {
   if (config.mode === "admins") return Boolean(String(config.message || "").trim());
   return Boolean(String(target.customMessage || "").trim() || String(config.forwardLink || "").trim() || String(config.message || "").trim());
+}
+
+function telegramDateMs(value) {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return numeric > 100000000000 ? numeric : numeric * 1000;
+}
+
+function targetLastRunMs(target) {
+  const value = new Date(target.lastRunAt || 0).getTime();
+  return Number.isFinite(value) ? value : 0;
+}
+
+async function checkActivityGate(client, target, senderAccountId, config) {
+  if (!config.activityGateEnabled || config.mode === "admins") return { allowed: true };
+  const lastRunAt = targetLastRunMs(target);
+  if (!lastRunAt) return { allowed: true };
+
+  const peer = peerForSender(target, senderAccountId);
+  const limit = Math.max(40, Math.min(120, config.activityGateMinMessages + 30));
+  const messages = await client.getMessages(peer, { limit });
+  let newMessages = 0;
+  let latestAt = 0;
+
+  for (const message of messages || []) {
+    const at = telegramDateMs(message.date);
+    if (!at || at <= lastRunAt) continue;
+    latestAt = Math.max(latestAt, at);
+    if (message.className !== "Message" || message.action || message.out || message.viaBotId) continue;
+    newMessages += 1;
+  }
+
+  const allowed = newMessages >= config.activityGateMinMessages;
+  return {
+    allowed,
+    newMessages,
+    latestAt,
+    minMessages: config.activityGateMinMessages,
+    reason: allowed ? "" : `WAIT_ACTIVITY: ${newMessages}/${config.activityGateMinMessages} chat baru setelah blast terakhir`
+  };
 }
 
 async function sendTargetPayload(client, target, senderAccountId, config) {
@@ -946,6 +1000,20 @@ async function sendTargets(source, manual = false, forcedMode = null) {
               status: attempt > 1 ? `Mengirim ulang percobaan ${attempt}` : "Mengirim"
             };
             if (!senderInfo.avatarUrl) refreshAccountProfile(senderAccountId);
+            const gate = await checkActivityGate(client, target, senderAccountId, config);
+            if (!gate.allowed) {
+              target.lastStatus = gate.reason;
+              target.nextRunAt = new Date(Date.now() + Number(target.intervalSeconds) * 1000).toISOString();
+              delivered = true;
+              saveTargetProgress(targetType, target, `${source}: tahan ${target.name || target.title}, baru ${gate.newMessages}/${gate.minMessages} chat setelah blast terakhir`);
+              state.currentBlast = {
+                ...state.currentBlast,
+                status: `Ditahan: ${gate.newMessages}/${gate.minMessages} chat baru`,
+                finishedAt: new Date().toISOString()
+              };
+              await adaptiveDelay(Math.min(sendDelaySeconds, 1), 0, mode);
+              break;
+            }
             const payloadType = await sendTargetPayload(client, target, senderAccountId, config);
             target.lastRunAt = new Date().toISOString();
             target.lastStatus = "OK";
@@ -1354,6 +1422,8 @@ app.post("/api/settings/groups", (req, res) => {
   db.groupDelaySeconds = Math.max(0, Number(req.body.delaySeconds ?? db.groupDelaySeconds ?? 1));
   db.groupSchedulerEnabled = Boolean(req.body.schedulerEnabled);
   db.groupLoopEnabled = Boolean(req.body.loopEnabled);
+  db.groupActivityGateEnabled = Boolean(req.body.activityGateEnabled);
+  db.groupActivityGateMinMessages = Math.max(1, Math.min(50, Number(req.body.activityGateMinMessages || db.groupActivityGateMinMessages || 10)));
   saveDb(db);
   res.json({ ok: true });
 });
@@ -1367,6 +1437,8 @@ app.post("/api/settings/folder-groups", (req, res) => {
   db.folderGroupDelaySeconds = Math.max(0, Number(req.body.delaySeconds ?? db.folderGroupDelaySeconds ?? 3));
   db.folderGroupSchedulerEnabled = Boolean(req.body.schedulerEnabled);
   db.folderGroupLoopEnabled = Boolean(req.body.loopEnabled);
+  db.folderGroupActivityGateEnabled = Boolean(req.body.activityGateEnabled);
+  db.folderGroupActivityGateMinMessages = Math.max(1, Math.min(50, Number(req.body.activityGateMinMessages || db.folderGroupActivityGateMinMessages || 10)));
   saveDb(db);
   res.json({ ok: true });
 });

@@ -188,6 +188,10 @@ function fillFromStatus() {
   $("groupLoopEnabled").checked = Boolean(state.status.groupLoopEnabled);
   $("folderGroupLoopEnabled").checked = Boolean(state.status.folderGroupLoopEnabled);
   $("adminLoopEnabled").checked = Boolean(state.status.adminLoopEnabled);
+  $("groupActivityGateEnabled").checked = Boolean(state.status.groupActivityGateEnabled);
+  $("folderGroupActivityGateEnabled").checked = Boolean(state.status.folderGroupActivityGateEnabled);
+  $("groupActivityGateMinMessages").value = state.status.groupActivityGateMinMessages || state.status.activityGateMinMessages || 10;
+  $("folderGroupActivityGateMinMessages").value = state.status.folderGroupActivityGateMinMessages || state.status.activityGateMinMessages || 10;
   $("quietHoursEnabled").checked = Boolean(state.status.quietHoursEnabled);
   $("quietHoursStart").value = state.status.quietHoursStart || "02:50";
   $("quietHoursEnd").value = state.status.quietHoursEnd || "03:20";
@@ -249,6 +253,7 @@ function renderStatus() {
     `Jadwal grup: ${state.status.groupSchedulerEnabled ? "aktif" : "mati"}. Jadwal kontak: ${state.status.adminSchedulerEnabled ? "aktif" : "mati"}. ` +
     `Default grup: ${state.status.groupForwardLink ? "forward channel" : "teks"}. ` +
     `Default folder: ${state.status.folderGroupForwardLink ? "forward channel" : "teks"}. Jadwal folder: ${state.status.folderGroupSchedulerEnabled ? "aktif" : "mati"}. Loop folder: ${state.status.folderGroupLoopEnabled ? "aktif" : "mati"}. ` +
+    `Activity gate grup: ${state.status.groupActivityGateEnabled ? `${state.status.groupActivityGateMinMessages || 10} chat` : "mati"}. Activity gate folder: ${state.status.folderGroupActivityGateEnabled ? `${state.status.folderGroupActivityGateMinMessages || 10} chat` : "mati"}. ` +
     `Quiet hours: ${state.status.quietHoursEnabled ? `${state.status.quietHoursStart}-${state.status.quietHoursEnd}` : "mati"}. ` +
     `Watchdog: ${state.status.reconnectWatchdogEnabled !== false ? "aktif" : "mati"}. Retry koneksi: ${state.status.networkRetrySeconds || 300} detik. ` +
     `Loop grup: ${state.status.groupLoopEnabled ? "aktif" : "mati"}. Loop kontak: ${state.status.adminLoopEnabled ? "aktif" : "mati"}. ` +
@@ -664,7 +669,9 @@ bind("saveGroupSettingsBtn", async () => {
       defaultIntervalSeconds: Number($("groupDefaultIntervalSeconds").value),
       delaySeconds: Number($("groupDelaySeconds").value),
       schedulerEnabled: $("groupSchedulerEnabled").checked,
-      loopEnabled: $("groupLoopEnabled").checked
+      loopEnabled: $("groupLoopEnabled").checked,
+      activityGateEnabled: $("groupActivityGateEnabled").checked,
+      activityGateMinMessages: Number($("groupActivityGateMinMessages").value)
     })
   });
   toast("Setting grup disimpan.");
@@ -681,7 +688,9 @@ bind("saveFolderGroupSettingsBtn", async () => {
       defaultIntervalSeconds: Number($("folderGroupDefaultIntervalSeconds").value),
       delaySeconds: Number($("folderGroupDelaySeconds").value),
       schedulerEnabled: $("folderGroupSchedulerEnabled").checked,
-      loopEnabled: $("folderGroupLoopEnabled").checked
+      loopEnabled: $("folderGroupLoopEnabled").checked,
+      activityGateEnabled: $("folderGroupActivityGateEnabled").checked,
+      activityGateMinMessages: Number($("folderGroupActivityGateMinMessages").value)
     })
   });
   toast("Setting folder disimpan.");
@@ -761,7 +770,9 @@ bind("sendGroupsNowBtn", async () => {
       defaultIntervalSeconds: Number($("groupDefaultIntervalSeconds").value),
       delaySeconds: Number($("groupDelaySeconds").value),
       schedulerEnabled: $("groupSchedulerEnabled").checked,
-      loopEnabled: $("groupLoopEnabled").checked
+      loopEnabled: $("groupLoopEnabled").checked,
+      activityGateEnabled: $("groupActivityGateEnabled").checked,
+      activityGateMinMessages: Number($("groupActivityGateMinMessages").value)
     })
   });
   const result = await api("/api/send-groups-now", { method: "POST", body: "{}" });
@@ -785,7 +796,9 @@ bind("sendFolderGroupsNowBtn", async () => {
       defaultIntervalSeconds: Number($("folderGroupDefaultIntervalSeconds").value),
       delaySeconds: Number($("folderGroupDelaySeconds").value),
       schedulerEnabled: $("folderGroupSchedulerEnabled").checked,
-      loopEnabled: $("folderGroupLoopEnabled").checked
+      loopEnabled: $("folderGroupLoopEnabled").checked,
+      activityGateEnabled: $("folderGroupActivityGateEnabled").checked,
+      activityGateMinMessages: Number($("folderGroupActivityGateMinMessages").value)
     })
   });
   const result = await api("/api/send-folder-groups-now", { method: "POST", body: "{}" });

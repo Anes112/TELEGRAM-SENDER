@@ -102,6 +102,8 @@
               <label>Jeda next folder grup detik<input id="folderGroupDelaySeconds" type="number" min="0" step="1"></label>
               <label class="checkline"><input id="folderGroupSchedulerEnabled" type="checkbox"> Jadwal folder aktif</label>
               <label class="checkline"><input id="folderGroupLoopEnabled" type="checkbox"> Loop folder</label>
+              <label class="checkline"><input id="folderGroupActivityGateEnabled" type="checkbox"> Tahan kalau grup belum aktif</label>
+              <label>Minimal chat baru<input id="folderGroupActivityGateMinMessages" type="number" min="1" max="50" step="1"></label>
             </div>
             <label>Link post channel folder<input id="folderGroupForwardLink" placeholder="https://t.me/channel_kamu/123"></label>
             <label>Teks fallback folder<textarea id="folderGroupMessage" placeholder="Dipakai kalau link forward folder kosong dan target tidak punya teks custom"></textarea></label>
@@ -147,6 +149,8 @@
               <label>Jeda next grup detik<input id="groupDelaySeconds" type="number" min="0" step="1"></label>
               <label class="checkline"><input id="groupSchedulerEnabled" type="checkbox"> Jadwal grup aktif</label>
               <label class="checkline"><input id="groupLoopEnabled" type="checkbox"> Loop grup</label>
+              <label class="checkline"><input id="groupActivityGateEnabled" type="checkbox"> Tahan kalau grup belum aktif</label>
+              <label>Minimal chat baru<input id="groupActivityGateMinMessages" type="number" min="1" max="50" step="1"></label>
             </div>
             <div class="actions">
               <button id="saveGroupSettingsBtn">Simpan setting grup</button>
