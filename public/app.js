@@ -92,6 +92,10 @@ function countdownText(item) {
   return `sisa ${fmtDuration(seconds)}`;
 }
 
+function secondsToDays(seconds) {
+  return Math.max(1, Math.ceil((Number(seconds) || 86400) / 86400));
+}
+
 function activeAccountId() {
   return state.selectedAccountId || $("accountSelect").value || state.status?.activeAccountId || "";
 }
@@ -173,12 +177,13 @@ function fillFromStatus() {
   $("folderGroupMessage").value = state.status.folderGroupMessage || "";
   $("folderGroupForwardLink").value = state.status.folderGroupForwardLink || "";
   $("adminMessage").value = state.status.adminMessage || state.status.message || "";
+  $("adminForwardLink").value = state.status.adminForwardLink || "";
   $("groupSenderAccountSelect").value = state.status.groupSenderAccountId || state.status.senderAccountId || "target";
   $("adminSenderAccountSelect").value = state.status.adminSenderAccountId || state.status.senderAccountId || "target";
   $("folderGroupSenderAccountSelect").value = state.status.folderGroupSenderAccountId || state.status.groupSenderAccountId || state.status.senderAccountId || "target";
   $("groupDefaultIntervalSeconds").value = state.status.groupDefaultIntervalSeconds || state.status.defaultIntervalSeconds || 3600;
   $("folderGroupDefaultIntervalSeconds").value = state.status.folderGroupDefaultIntervalSeconds || state.status.groupDefaultIntervalSeconds || state.status.defaultIntervalSeconds || 3600;
-  $("adminDefaultIntervalSeconds").value = state.status.adminDefaultIntervalSeconds || state.status.defaultIntervalSeconds || 3600;
+  $("adminDefaultIntervalDays").value = secondsToDays(state.status.adminDefaultIntervalSeconds || state.status.defaultIntervalSeconds || 86400);
   $("groupDelaySeconds").value = state.status.groupDelaySeconds ?? state.status.delaySeconds ?? 1;
   $("folderGroupDelaySeconds").value = state.status.folderGroupDelaySeconds ?? state.status.groupDelaySeconds ?? 3;
   $("adminDelaySeconds").value = state.status.adminDelaySeconds ?? state.status.delaySeconds ?? 1;
@@ -252,6 +257,7 @@ function renderStatus() {
   $("scheduleInfo").textContent =
     `Jadwal grup: ${state.status.groupSchedulerEnabled ? "aktif" : "mati"}. Jadwal kontak: ${state.status.adminSchedulerEnabled ? "aktif" : "mati"}. ` +
     `Default grup: ${state.status.groupForwardLink ? "forward channel" : "teks"}. ` +
+    `Default admin: ${state.status.adminForwardLink ? "forward channel" : "teks"} tiap ${secondsToDays(state.status.adminDefaultIntervalSeconds || 86400)} hari. ` +
     `Default folder: ${state.status.folderGroupForwardLink ? "forward channel" : "teks"}. Jadwal folder: ${state.status.folderGroupSchedulerEnabled ? "aktif" : "mati"}. Loop folder: ${state.status.folderGroupLoopEnabled ? "aktif" : "mati"}. ` +
     `Activity gate grup: ${state.status.groupActivityGateEnabled ? `${state.status.groupActivityGateMinMessages || 10} chat` : "mati"}. Activity gate folder: ${state.status.folderGroupActivityGateEnabled ? `${state.status.folderGroupActivityGateMinMessages || 10} chat` : "mati"}. ` +
     `Quiet hours: ${state.status.quietHoursEnabled ? `${state.status.quietHoursStart}-${state.status.quietHoursEnd}` : "mati"}. ` +
@@ -717,8 +723,9 @@ bind("saveAdminSettingsBtn", async () => {
     method: "POST",
     body: JSON.stringify({
       message: $("adminMessage").value,
+      forwardLink: $("adminForwardLink").value,
       senderAccountId: $("adminSenderAccountSelect").value,
-      defaultIntervalSeconds: Number($("adminDefaultIntervalSeconds").value),
+      defaultIntervalDays: Number($("adminDefaultIntervalDays").value),
       delaySeconds: Number($("adminDelaySeconds").value),
       schedulerEnabled: $("adminSchedulerEnabled").checked,
       loopEnabled: $("adminLoopEnabled").checked
@@ -834,8 +841,9 @@ bind("sendAdminsNowBtn", async () => {
     method: "POST",
     body: JSON.stringify({
       message: $("adminMessage").value,
+      forwardLink: $("adminForwardLink").value,
       senderAccountId: $("adminSenderAccountSelect").value,
-      defaultIntervalSeconds: Number($("adminDefaultIntervalSeconds").value),
+      defaultIntervalDays: Number($("adminDefaultIntervalDays").value),
       delaySeconds: Number($("adminDelaySeconds").value),
       schedulerEnabled: $("adminSchedulerEnabled").checked,
       loopEnabled: $("adminLoopEnabled").checked

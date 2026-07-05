@@ -32,6 +32,7 @@ const defaultDb = {
   folderGroupMessage: "",
   folderGroupForwardLink: "",
   adminMessage: "",
+  adminForwardLink: "",
   defaultIntervalSeconds: 3600,
   groupDefaultIntervalSeconds: 3600,
   folderGroupDefaultIntervalSeconds: 3600,
@@ -158,6 +159,7 @@ function readDb() {
   db.folderGroupMessage = db.folderGroupMessage ?? "";
   db.folderGroupForwardLink = String(db.folderGroupForwardLink || "");
   db.adminMessage = db.adminMessage ?? db.message ?? "";
+  db.adminForwardLink = String(db.adminForwardLink || "");
   db.groupDefaultIntervalSeconds = Number(db.groupDefaultIntervalSeconds ?? db.defaultIntervalSeconds ?? 3600);
   db.folderGroupDefaultIntervalSeconds = Number(db.folderGroupDefaultIntervalSeconds ?? db.groupDefaultIntervalSeconds ?? db.defaultIntervalSeconds ?? 3600);
   db.adminDefaultIntervalSeconds = Number(db.adminDefaultIntervalSeconds ?? db.defaultIntervalSeconds ?? 3600);
@@ -797,7 +799,7 @@ function modeConfig(db, mode) {
         ? (db.folderGroupMessage || "")
         : (db.groupMessage || db.message || ""),
     forwardLink: isAdmins
-      ? ""
+      ? String(db.adminForwardLink || "")
       : isFolderGroups
         ? String(db.folderGroupForwardLink || "")
         : String(db.groupForwardLink || ""),
@@ -816,7 +818,7 @@ function modeConfig(db, mode) {
 }
 
 function targetPayloadReady(target, config) {
-  if (config.mode === "admins") return Boolean(String(config.message || "").trim());
+  if (config.mode === "admins") return Boolean(String(config.forwardLink || "").trim() || String(config.message || "").trim());
   return Boolean(String(target.customMessage || "").trim() || String(config.forwardLink || "").trim() || String(config.message || "").trim());
 }
 
@@ -871,7 +873,7 @@ async function sendTargetPayload(client, target, senderAccountId, config) {
     await client.sendMessage(peer, { message: customMessage });
     return "teks custom";
   }
-  if (config.mode !== "admins" && String(config.forwardLink || "").trim()) {
+  if (String(config.forwardLink || "").trim()) {
     const forward = parseTelegramMessageLink(config.forwardLink);
     await client.forwardMessages(peer, { messages: forward.messageId, fromPeer: forward.fromPeer });
     return "forward channel";
@@ -1496,8 +1498,12 @@ app.post("/api/settings/folder-groups", (req, res) => {
 app.post("/api/settings/admins", (req, res) => {
   const db = readDb();
   db.adminMessage = String(req.body.message || "");
+  db.adminForwardLink = String(req.body.forwardLink || "");
   db.adminSenderAccountId = String(req.body.senderAccountId || "target");
-  db.adminDefaultIntervalSeconds = Math.max(5, Number(req.body.defaultIntervalSeconds || db.adminDefaultIntervalSeconds || 3600));
+  const intervalDays = Number(req.body.defaultIntervalDays || 0);
+  db.adminDefaultIntervalSeconds = intervalDays > 0
+    ? Math.max(86400, Math.round(intervalDays * 86400))
+    : Math.max(5, Number(req.body.defaultIntervalSeconds || db.adminDefaultIntervalSeconds || 3600));
   db.adminDelaySeconds = Math.max(0, Number(req.body.delaySeconds ?? db.adminDelaySeconds ?? 1));
   db.adminSchedulerEnabled = Boolean(req.body.schedulerEnabled);
   db.adminLoopEnabled = Boolean(req.body.loopEnabled);

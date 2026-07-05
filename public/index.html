@@ -180,10 +180,11 @@
           </section>
           <section class="panel">
             <h3>Blast Kontak / Admin - Nomor Kedua</h3>
+            <label>Link post channel admin<input id="adminForwardLink" placeholder="https://t.me/channel_kamu/123"></label>
             <label>Teks untuk kontak/admin<textarea id="adminMessage" placeholder="Pesan yang dikirim ke admin/owner/kontak"></textarea></label>
             <div class="grid4">
               <label>Pengirim kontak<select id="adminSenderAccountSelect"></select></label>
-              <label>Default interval detik<input id="adminDefaultIntervalSeconds" type="number" min="5" step="1"></label>
+              <label>Default interval hari<input id="adminDefaultIntervalDays" type="number" min="1" step="1"></label>
               <label>Jeda next kontak detik<input id="adminDelaySeconds" type="number" min="0" step="1"></label>
               <label class="checkline"><input id="adminSchedulerEnabled" type="checkbox"> Jadwal kontak aktif</label>
               <label class="checkline"><input id="adminLoopEnabled" type="checkbox"> Loop kontak</label>
