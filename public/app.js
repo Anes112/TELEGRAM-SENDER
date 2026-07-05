@@ -395,6 +395,7 @@ function intervalRow(item, kind) {
 }
 
 function intervalRowV2(item, kind) {
+  const isAdmin = kind === "admins";
   const customMessage = kind === "groups" || kind === "folderGroups"
     ? `<textarea class="customMessageInput" placeholder="Teks khusus grup ini. Kosongkan kalau mau forward dari channel default.">${escapeHtml(item.customMessage || "")}</textarea>`
     : "";
@@ -407,7 +408,10 @@ function intervalRowV2(item, kind) {
   return `
     <div class="intervalRow" data-kind="${kind}" data-key="${escapeHtml(keyOf(item))}">
       <div><b>${escapeHtml(item.title || item.name)}</b><div class="targetMeta">${escapeHtml(item.accountLabel || item.accountId)} - next: ${fmtDate(item.nextRunAt)}</div></div>
-      <input class="intervalInput" type="number" min="5" step="1" value="${Number(item.intervalSeconds || 3600)}">
+      <div>
+        <input class="intervalInput" type="number" min="${isAdmin ? 1 : 5}" step="1" value="${isAdmin ? secondsToDays(item.intervalSeconds || 86400) : Number(item.intervalSeconds || 3600)}" title="${isAdmin ? "Interval hari" : "Interval detik"}">
+        <div class="targetMeta">${isAdmin ? "hari" : "detik"}</div>
+      </div>
       <label class="checkline"><input class="enabledInput" type="checkbox" ${item.enabled !== false ? "checked" : ""}> Aktif</label>
       ${activityGate}
       <div>
@@ -767,7 +771,7 @@ async function saveIntervals(kind) {
     const item = byKey.get(row.dataset.key);
     return {
       ...item,
-      intervalSeconds: Number(row.querySelector(".intervalInput").value),
+      intervalSeconds: kind === "admins" ? Math.max(1, Number(row.querySelector(".intervalInput").value)) * 86400 : Number(row.querySelector(".intervalInput").value),
       enabled: row.querySelector(".enabledInput").checked,
       activityGateEnabled: row.querySelector(".activityGateInput")?.checked,
       activityGateMinMessages: Number(row.querySelector(".activityGateMinInput")?.value || item.activityGateMinMessages || 10),
@@ -871,6 +875,14 @@ bind("stopFolderGroupsBtn", async () => {
   $("folderGroupSchedulerEnabled").checked = false;
   $("folderGroupLoopEnabled").checked = false;
   toast(result.stopped ? "Stop folder diminta." : result.message);
+  await refreshStatus();
+});
+
+bind("stopAdminsBtn", async () => {
+  const result = await api("/api/stop-send/admins", { method: "POST", body: "{}" });
+  $("adminSchedulerEnabled").checked = false;
+  $("adminLoopEnabled").checked = false;
+  toast(result.stopped ? "Stop admin diminta." : result.message);
   await refreshStatus();
 });
 

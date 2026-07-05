@@ -836,7 +836,8 @@ function targetLastRunMs(target) {
 }
 
 async function checkActivityGate(client, target, senderAccountId, config) {
-  const targetGateEnabled = typeof target.activityGateEnabled === "boolean" ? target.activityGateEnabled : config.activityGateEnabled;
+  if (!config.activityGateEnabled) return { allowed: true };
+  const targetGateEnabled = target.activityGateEnabled !== false;
   if (!targetGateEnabled || config.mode === "admins") return { allowed: true };
   const lastRunAt = targetLastRunMs(target);
   if (!lastRunAt) return { allowed: true };
@@ -1497,6 +1498,7 @@ app.post("/api/settings/folder-groups", (req, res) => {
 
 app.post("/api/settings/admins", (req, res) => {
   const db = readDb();
+  const oldDefaultInterval = Number(db.adminDefaultIntervalSeconds || db.defaultIntervalSeconds || 3600);
   db.adminMessage = String(req.body.message || "");
   db.adminForwardLink = String(req.body.forwardLink || "");
   db.adminSenderAccountId = String(req.body.senderAccountId || "target");
@@ -1507,6 +1509,11 @@ app.post("/api/settings/admins", (req, res) => {
   db.adminDelaySeconds = Math.max(0, Number(req.body.delaySeconds ?? db.adminDelaySeconds ?? 1));
   db.adminSchedulerEnabled = Boolean(req.body.schedulerEnabled);
   db.adminLoopEnabled = Boolean(req.body.loopEnabled);
+  db.selectedAdmins = db.selectedAdmins.map((admin) => {
+    const current = Number(admin.intervalSeconds || 0);
+    const shouldUseDefault = !current || current === oldDefaultInterval || current < 86400;
+    return shouldUseDefault ? { ...admin, intervalSeconds: db.adminDefaultIntervalSeconds } : admin;
+  });
   saveDb(db);
   res.json({ ok: true });
 });
