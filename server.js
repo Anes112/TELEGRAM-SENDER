@@ -1275,9 +1275,9 @@ setInterval(async () => {
       saveDb(db);
     }
     const jobs = [];
-    if (db.groupSchedulerEnabled && dueTargets(db, false, "groups").length) jobs.push(sendTargets("jadwal grup", false, "groups"));
-    if (db.folderGroupSchedulerEnabled && dueTargets(db, false, "folderGroups").length) jobs.push(sendTargets("jadwal folder grup", false, "folderGroups"));
-    if (db.adminSchedulerEnabled && dueTargets(db, false, "admins").length) jobs.push(sendTargets("jadwal kontak", false, "admins"));
+    if ((db.groupSchedulerEnabled || db.groupLoopEnabled) && dueTargets(db, false, "groups").length) jobs.push(sendTargets("jadwal grup", false, "groups"));
+    if ((db.folderGroupSchedulerEnabled || db.folderGroupLoopEnabled) && dueTargets(db, false, "folderGroups").length) jobs.push(sendTargets("jadwal folder grup", false, "folderGroups"));
+    if ((db.adminSchedulerEnabled || db.adminLoopEnabled) && dueTargets(db, false, "admins").length) jobs.push(sendTargets("jadwal kontak", false, "admins"));
     if (jobs.length) await Promise.all(jobs);
   } catch (error) {
     const db = readDb();
@@ -1291,15 +1291,15 @@ async function reconnectWatchdog() {
   const db = readDb();
   if (!db.reconnectWatchdogEnabled) return;
   const senderIds = new Set();
-  if (db.groupSchedulerEnabled) {
+  if (db.groupSchedulerEnabled || db.groupLoopEnabled) {
     if (db.groupSenderAccountId && db.groupSenderAccountId !== "target") senderIds.add(db.groupSenderAccountId);
     else for (const target of db.selectedGroups) if (target.enabled !== false) senderIds.add(target.accountId);
   }
-  if (db.folderGroupSchedulerEnabled) {
+  if (db.folderGroupSchedulerEnabled || db.folderGroupLoopEnabled) {
     if (db.folderGroupSenderAccountId && db.folderGroupSenderAccountId !== "target") senderIds.add(db.folderGroupSenderAccountId);
     else for (const target of db.selectedFolderGroups) if (target.enabled !== false) senderIds.add(target.accountId);
   }
-  if (db.adminSchedulerEnabled) {
+  if (db.adminSchedulerEnabled || db.adminLoopEnabled) {
     if (db.adminSenderAccountId && db.adminSenderAccountId !== "target") senderIds.add(db.adminSenderAccountId);
     else for (const target of db.selectedAdmins) if (target.enabled !== false) senderIds.add(target.accountId);
   }
