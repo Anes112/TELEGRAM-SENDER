@@ -11,6 +11,7 @@ const SESSIONS_DIR = path.join(DATA_DIR, "sessions");
 const AVATARS_DIR = path.join(DATA_DIR, "avatars");
 const DB_PATH = path.join(DATA_DIR, "db.json");
 const PUBLIC_DIR = path.join(ROOT, "public");
+const ACTIVITY_GATE_RECHECK_SECONDS = 600;
 fs.mkdirSync(SESSIONS_DIR, { recursive: true });
 fs.mkdirSync(AVATARS_DIR, { recursive: true });
 
@@ -1045,13 +1046,14 @@ async function sendTargets(source, manual = false, forcedMode = null) {
             if (!senderInfo.avatarUrl) refreshAccountProfile(senderAccountId);
             const gate = await checkActivityGate(client, target, senderAccountId, config);
             if (!gate.allowed) {
+              const recheckSeconds = Math.max(60, Math.min(Number(target.intervalSeconds) || ACTIVITY_GATE_RECHECK_SECONDS, ACTIVITY_GATE_RECHECK_SECONDS));
               target.lastStatus = gate.reason;
-              target.nextRunAt = new Date(Date.now() + Number(target.intervalSeconds) * 1000).toISOString();
+              target.nextRunAt = new Date(Date.now() + recheckSeconds * 1000).toISOString();
               delivered = true;
-              saveTargetProgress(targetType, target, `${source}: tahan ${target.name || target.title}, baru ${gate.newMessages}/${gate.minMessages} chat setelah blast terakhir`);
+              saveTargetProgress(targetType, target, `${source}: tahan ${target.name || target.title}, baru ${gate.newMessages}/${gate.minMessages} chat setelah blast terakhir. Cek ulang ${Math.ceil(recheckSeconds / 60)} menit.`);
               state.currentBlast = {
                 ...state.currentBlast,
-                status: `Ditahan: ${gate.newMessages}/${gate.minMessages} chat baru`,
+                status: `Ditahan: ${gate.newMessages}/${gate.minMessages} chat baru, cek ulang ${Math.ceil(recheckSeconds / 60)} menit`,
                 finishedAt: new Date().toISOString()
               };
               await adaptiveDelay(Math.min(sendDelaySeconds, 1), 0, mode);
