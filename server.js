@@ -245,6 +245,7 @@ function normalizeTargets(targets, db) {
     enabled: target.enabled !== false,
     nextRunAt: target.nextRunAt || null,
     lastRunAt: target.lastRunAt || null,
+    lastMessageId: target.lastMessageId || null,
     lastStatus: target.lastStatus || "",
     customMessage: target.customMessage || "",
     activityGateEnabled: typeof target.activityGateEnabled === "boolean" ? target.activityGateEnabled : null,
@@ -841,20 +842,28 @@ async function checkActivityGate(client, target, senderAccountId, config) {
   const targetGateEnabled = target.activityGateEnabled !== false;
   if (!targetGateEnabled || config.mode === "admins") return { allowed: true };
   const lastRunAt = targetLastRunMs(target);
-  if (!lastRunAt) return { allowed: true };
+  const lastMessageId = Number(target.lastMessageId || 0);
+  if (!lastRunAt && !lastMessageId) return { allowed: true };
 
   const minMessages = Math.max(1, Math.min(50, Number(target.activityGateMinMessages || config.activityGateMinMessages || 10)));
   const peer = peerForSender(target, senderAccountId);
-  const limit = Math.max(40, Math.min(120, minMessages + 30));
+  const limit = Math.max(80, Math.min(200, minMessages + 80));
   const messages = await client.getMessages(peer, { limit });
   let newMessages = 0;
   let latestAt = 0;
 
   for (const message of messages || []) {
+    const messageId = Number(message.id || 0);
+    if (lastMessageId) {
+      if (!messageId || messageId <= lastMessageId) continue;
+    } else {
+      const at = telegramDateMs(message.date);
+      if (!at || at <= lastRunAt) continue;
+      latestAt = Math.max(latestAt, at);
+    }
+    if (message.className !== "Message" || message.action) continue;
     const at = telegramDateMs(message.date);
-    if (!at || at <= lastRunAt) continue;
     latestAt = Math.max(latestAt, at);
-    if (message.className !== "Message" || message.action || message.out || message.viaBotId) continue;
     newMessages += 1;
   }
 
@@ -868,20 +877,35 @@ async function checkActivityGate(client, target, senderAccountId, config) {
   };
 }
 
+function sentMessageMeta(result) {
+  const queue = Array.isArray(result) ? [...result] : [result];
+  while (queue.length) {
+    const item = queue.shift();
+    if (!item) continue;
+    if (Array.isArray(item)) {
+      queue.push(...item);
+      continue;
+    }
+    if (item.id) return { id: String(item.id), date: item.date ? new Date(telegramDateMs(item.date)).toISOString() : "" };
+    if (Array.isArray(item.updates)) queue.push(...item.updates);
+  }
+  return { id: "", date: "" };
+}
+
 async function sendTargetPayload(client, target, senderAccountId, config) {
   const peer = peerForSender(target, senderAccountId);
   const customMessage = String(target.customMessage || "").trim();
   if (config.mode !== "admins" && customMessage) {
-    await client.sendMessage(peer, { message: customMessage });
-    return "teks custom";
+    const sent = await client.sendMessage(peer, { message: customMessage });
+    return { type: "teks custom", ...sentMessageMeta(sent) };
   }
   if (String(config.forwardLink || "").trim()) {
     const forward = parseTelegramMessageLink(config.forwardLink);
-    await client.forwardMessages(peer, { messages: forward.messageId, fromPeer: forward.fromPeer });
-    return "forward channel";
+    const sent = await client.forwardMessages(peer, { messages: forward.messageId, fromPeer: forward.fromPeer });
+    return { type: "forward channel", ...sentMessageMeta(sent) };
   }
-  await client.sendMessage(peer, { message: config.message });
-  return "teks default";
+  const sent = await client.sendMessage(peer, { message: config.message });
+  return { type: "teks default", ...sentMessageMeta(sent) };
 }
 
 async function cancellableDelay(seconds, mode = "groups") {
@@ -1059,8 +1083,10 @@ async function sendTargets(source, manual = false, forcedMode = null) {
               await adaptiveDelay(Math.min(sendDelaySeconds, 1), 0, mode);
               break;
             }
-            const payloadType = await sendTargetPayload(client, target, senderAccountId, config);
+            const payload = await sendTargetPayload(client, target, senderAccountId, config);
+            const payloadType = payload.type;
             target.lastRunAt = new Date().toISOString();
+            target.lastMessageId = payload.id || target.lastMessageId || null;
             target.lastStatus = "OK";
             target.nextRunAt = new Date(Date.now() + Number(target.intervalSeconds) * 1000).toISOString();
             totalSent += 1;
@@ -1359,6 +1385,7 @@ app.post("/api/groups/selected", (req, res) => {
     enabled: group.enabled !== false,
     nextRunAt: group.nextRunAt || null,
     lastRunAt: group.lastRunAt || null,
+    lastMessageId: group.lastMessageId || null,
     lastStatus: group.lastStatus || "",
     customMessage: String(group.customMessage || ""),
     activityGateEnabled: typeof group.activityGateEnabled === "boolean" ? group.activityGateEnabled : Boolean(db.groupActivityGateEnabled),
@@ -1384,6 +1411,7 @@ app.post("/api/folders/selected", (req, res) => {
     enabled: group.enabled !== false,
     nextRunAt: group.nextRunAt || null,
     lastRunAt: group.lastRunAt || null,
+    lastMessageId: group.lastMessageId || null,
     lastStatus: group.lastStatus || "",
     customMessage: String(group.customMessage || ""),
     activityGateEnabled: typeof group.activityGateEnabled === "boolean" ? group.activityGateEnabled : Boolean(db.folderGroupActivityGateEnabled),
@@ -1422,6 +1450,7 @@ app.post("/api/admins/selected", (req, res) => {
     enabled: admin.enabled !== false,
     nextRunAt: admin.nextRunAt || null,
     lastRunAt: admin.lastRunAt || null,
+    lastMessageId: admin.lastMessageId || null,
     lastStatus: admin.lastStatus || "",
     customMessage: String(admin.customMessage || "")
   }));
@@ -1613,7 +1642,7 @@ app.post("/api/stop-send/:mode", (req, res) => {
 
 app.post("/api/progress/reset", (req, res) => {
   const db = readDb();
-  const resetTarget = (target) => ({ ...target, lastRunAt: null, lastStatus: "", nextRunAt: null });
+  const resetTarget = (target) => ({ ...target, lastRunAt: null, lastMessageId: null, lastStatus: "", nextRunAt: null });
   db.selectedGroups = db.selectedGroups.map(resetTarget);
   db.selectedFolderGroups = db.selectedFolderGroups.map(resetTarget);
   db.selectedAdmins = db.selectedAdmins.map(resetTarget);
