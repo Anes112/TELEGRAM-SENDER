@@ -266,7 +266,7 @@ function renderStatus() {
     `AI gate: ${state.status.aiActivityAgentEnabled !== false ? (state.status.groqReady ? "aktif" : "aktif tapi key belum ada") : "mati"}. ` +
     `Quiet hours: ${state.status.quietHoursEnabled ? `${state.status.quietHoursStart}-${state.status.quietHoursEnd}` : "mati"}. ` +
     `Watchdog: ${state.status.reconnectWatchdogEnabled !== false ? "aktif" : "mati"}. Retry koneksi: ${state.status.networkRetrySeconds || 300} detik. ` +
-    `Loop grup: ${state.status.groupLoopEnabled ? "aktif" : "mati"}. Loop kontak: ${state.status.adminLoopEnabled ? "aktif" : "mati"}. ` +
+    `Loop grup: ${state.status.groupLoopEnabled ? "aktif, lanjut otomatis sesuai interval" : "mati"}. Loop kontak: ${state.status.adminLoopEnabled ? "aktif" : "mati"}. ` +
     `Grup aktif: ${enabledGroups}/${state.status.selectedGroups.length}. Folder grup aktif: ${enabledFolderGroups}/${state.status.selectedFolderGroups?.length || 0}. Admin aktif: ${enabledAdmins}/${state.status.selectedAdmins.length}. ` +
     `Pengirim grup: ${groupSender}. Pengirim folder: ${folderSender}. Pengirim admin: ${adminSender}. ` +
     `Kondisi: ${activeBlasts ? `${activeBlasts} jalur sedang mengirim` : "idle"}. ` +

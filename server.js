@@ -1135,7 +1135,7 @@ function accountPublicInfo(accountId) {
   };
 }
 
-async function sendTargets(source, manual = false, forcedMode = null) {
+async function sendTargets(source, manual = false, forcedMode = null, options = {}) {
   const initialDb = readDb();
   const mode = forcedMode || initialDb.targetMode;
   const state = blastState(mode);
@@ -1298,6 +1298,7 @@ async function sendTargets(source, manual = false, forcedMode = null) {
       }
 
       if (cancelled || !manual) break;
+      if (options.singlePass) break;
       if (!config.loopEnabled) {
         firstPass = false;
         continue;
@@ -1767,20 +1768,28 @@ function startBackgroundSend(res, mode, label) {
     res.json({ skipped: true, message: `Pengiriman ${label} sedang berjalan.` });
     return;
   }
-  const validation = validateStartReady(readDb(), mode);
+  const db = readDb();
+  const config = modeConfig(db, mode);
+  const validation = validateStartReady(db, mode);
   if (!validation.ok) {
     res.json({ skipped: true, message: validation.message });
     return;
   }
+  const singlePass = Boolean(config.loopEnabled);
   Promise.resolve()
-    .then(() => sendTargets(`manual ${label}`, true, mode))
+    .then(() => sendTargets(`manual ${label}`, true, mode, { singlePass }))
     .catch((error) => {
       const db = readDb();
       db.lastStatus = `ERROR: ${error.message}`;
       addLog(db, db.lastStatus);
       saveDb(db);
     });
-  res.json({ started: true, message: `Pengiriman ${label} dimulai.` });
+  res.json({
+    started: true,
+    message: singlePass
+      ? `Pengiriman ${label} dimulai. Loop aktif dan akan lanjut otomatis sesuai interval.`
+      : `Pengiriman ${label} dimulai.`
+  });
 }
 
 app.post("/api/send-groups-now", (req, res) => {
