@@ -762,13 +762,17 @@ bind("saveSystemSettingsBtn", async () => {
 });
 
 bind("saveTargetIntervalsBtn", async () => {
+  await saveAllIntervals();
+  toast("Interval target disimpan.");
+  await refreshStatus();
+});
+
+async function saveAllIntervals() {
   await saveIntervals("groups");
   await saveIntervals("folderGroups");
   await saveIntervals("admins");
   state.intervalsDirty = false;
-  toast("Interval target disimpan.");
-  await refreshStatus();
-});
+}
 
 async function saveIntervals(kind) {
   const rows = Array.from(document.querySelectorAll(`.intervalRow[data-kind="${kind}"]`));
@@ -776,6 +780,7 @@ async function saveIntervals(kind) {
   const byKey = new Map(source.map((item) => [keyOf(item), item]));
   const targets = rows.map((row) => {
     const item = byKey.get(row.dataset.key);
+    if (!item) return null;
     return {
       ...item,
       intervalSeconds: kind === "admins" ? Math.max(1, Number(row.querySelector(".intervalInput").value)) * 86400 : Number(row.querySelector(".intervalInput").value),
@@ -785,17 +790,12 @@ async function saveIntervals(kind) {
       customMessage: row.querySelector(".customMessageInput")?.value || "",
       resetNextRun: true
     };
-  });
+  }).filter(Boolean);
   await api("/api/targets/update", { method: "POST", body: JSON.stringify({ kind, targets }) });
 }
 
 bind("sendGroupsNowBtn", async () => {
-  if (state.intervalsDirty) {
-    await saveIntervals("groups");
-    await saveIntervals("folderGroups");
-    await saveIntervals("admins");
-    state.intervalsDirty = false;
-  }
+  await saveAllIntervals();
   await api("/api/settings/groups", {
     method: "POST",
     body: JSON.stringify({
@@ -816,12 +816,7 @@ bind("sendGroupsNowBtn", async () => {
 });
 
 bind("sendFolderGroupsNowBtn", async () => {
-  if (state.intervalsDirty) {
-    await saveIntervals("groups");
-    await saveIntervals("folderGroups");
-    await saveIntervals("admins");
-    state.intervalsDirty = false;
-  }
+  await saveAllIntervals();
   await api("/api/settings/folder-groups", {
     method: "POST",
     body: JSON.stringify({
@@ -842,12 +837,7 @@ bind("sendFolderGroupsNowBtn", async () => {
 });
 
 bind("sendAdminsNowBtn", async () => {
-  if (state.intervalsDirty) {
-    await saveIntervals("groups");
-    await saveIntervals("folderGroups");
-    await saveIntervals("admins");
-    state.intervalsDirty = false;
-  }
+  await saveAllIntervals();
   await api("/api/settings/admins", {
     method: "POST",
     body: JSON.stringify({
@@ -914,9 +904,11 @@ $("folderSelect").addEventListener("change", () => {
 });
 $("folderGroupSearch").addEventListener("input", renderFolders);
 $("adminSearch").addEventListener("input", renderTargets);
-$("groupIntervals").addEventListener("input", () => { state.intervalsDirty = true; });
-$("folderGroupIntervals").addEventListener("input", () => { state.intervalsDirty = true; });
-$("adminIntervals").addEventListener("input", () => { state.intervalsDirty = true; });
+["input", "change"].forEach((eventName) => {
+  $("groupIntervals").addEventListener(eventName, () => { state.intervalsDirty = true; });
+  $("folderGroupIntervals").addEventListener(eventName, () => { state.intervalsDirty = true; });
+  $("adminIntervals").addEventListener(eventName, () => { state.intervalsDirty = true; });
+});
 
 initNavigation();
 refreshStatus(false).catch((error) => toast(error.message));

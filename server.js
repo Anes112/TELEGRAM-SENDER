@@ -139,6 +139,17 @@ function wakeTargets(targets) {
   ));
 }
 
+function applyDefaultInterval(targets, newDefault, oldDefault, options = {}) {
+  const minSeconds = Number(options.minSeconds || 5);
+  const nextInterval = Math.max(minSeconds, Number(newDefault || minSeconds));
+  const previousInterval = Number(oldDefault || 0);
+  return (Array.isArray(targets) ? targets : []).map((target) => {
+    const current = Number(target.intervalSeconds || 0);
+    const shouldUseDefault = !current || current === previousInterval || (options.forceBelow && current < options.forceBelow);
+    return shouldUseDefault ? { ...target, intervalSeconds: nextInterval, nextRunAt: null } : target;
+  });
+}
+
 function wakeActiveModesAfterQuiet(db, reason = "quiet hours selesai") {
   const touched = [];
   if (db.groupSchedulerEnabled || db.groupLoopEnabled) {
@@ -1612,6 +1623,7 @@ app.post("/api/settings", (req, res) => {
 
 app.post("/api/settings/groups", (req, res) => {
   const db = readDb();
+  const oldDefaultInterval = Number(db.groupDefaultIntervalSeconds || db.defaultIntervalSeconds || 3600);
   db.groupMessage = String(req.body.message || "");
   db.groupForwardLink = String(req.body.forwardLink || "");
   db.groupSenderAccountId = String(req.body.senderAccountId || "target");
@@ -1621,12 +1633,14 @@ app.post("/api/settings/groups", (req, res) => {
   db.groupLoopEnabled = Boolean(req.body.loopEnabled);
   db.groupActivityGateEnabled = Boolean(req.body.activityGateEnabled);
   db.groupActivityGateMinMessages = Math.max(1, Math.min(50, Number(req.body.activityGateMinMessages || db.groupActivityGateMinMessages || 10)));
+  db.selectedGroups = applyDefaultInterval(db.selectedGroups, db.groupDefaultIntervalSeconds, oldDefaultInterval);
   saveDb(db);
   res.json({ ok: true });
 });
 
 app.post("/api/settings/folder-groups", (req, res) => {
   const db = readDb();
+  const oldDefaultInterval = Number(db.folderGroupDefaultIntervalSeconds || db.groupDefaultIntervalSeconds || db.defaultIntervalSeconds || 3600);
   db.folderGroupMessage = String(req.body.message || "");
   db.folderGroupForwardLink = String(req.body.forwardLink || "");
   db.folderGroupSenderAccountId = String(req.body.senderAccountId || db.groupSenderAccountId || "target");
@@ -1636,6 +1650,7 @@ app.post("/api/settings/folder-groups", (req, res) => {
   db.folderGroupLoopEnabled = Boolean(req.body.loopEnabled);
   db.folderGroupActivityGateEnabled = Boolean(req.body.activityGateEnabled);
   db.folderGroupActivityGateMinMessages = Math.max(1, Math.min(50, Number(req.body.activityGateMinMessages || db.folderGroupActivityGateMinMessages || 10)));
+  db.selectedFolderGroups = applyDefaultInterval(db.selectedFolderGroups, db.folderGroupDefaultIntervalSeconds, oldDefaultInterval);
   saveDb(db);
   res.json({ ok: true });
 });
@@ -1653,11 +1668,7 @@ app.post("/api/settings/admins", (req, res) => {
   db.adminDelaySeconds = Math.max(0, Number(req.body.delaySeconds ?? db.adminDelaySeconds ?? 1));
   db.adminSchedulerEnabled = Boolean(req.body.schedulerEnabled);
   db.adminLoopEnabled = Boolean(req.body.loopEnabled);
-  db.selectedAdmins = db.selectedAdmins.map((admin) => {
-    const current = Number(admin.intervalSeconds || 0);
-    const shouldUseDefault = !current || current === oldDefaultInterval || current < 86400;
-    return shouldUseDefault ? { ...admin, intervalSeconds: db.adminDefaultIntervalSeconds } : admin;
-  });
+  db.selectedAdmins = applyDefaultInterval(db.selectedAdmins, db.adminDefaultIntervalSeconds, oldDefaultInterval, { forceBelow: 86400 });
   saveDb(db);
   res.json({ ok: true });
 });
