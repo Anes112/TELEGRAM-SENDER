@@ -26,9 +26,7 @@ while true; do
           echo "$NEW_HASH" > "$HASH_FILE"
           export TELEGRAM_SENDER_APP_DIR="$APP_DIR"
           bash "$TMP_SCRIPT" || true
-          if command -v pm2 >/dev/null 2>&1; then
-            HOST=0.0.0.0 pm2 restart telegram-backend --update-env || true
-          fi
+          echo "Auto update selesai. Restart backend manual kalau perlu."
         fi
       else
         echo "URL update bukan raw script valid."

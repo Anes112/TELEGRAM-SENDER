@@ -54,8 +54,5 @@ echo "Update dependency..."
 cd "$APP_DIR"
 npm install --omit=dev
 
-if command -v pm2 >/dev/null 2>&1; then
-  pm2 restart telegram-backend || true
-fi
-
 echo "Update selesai."
+echo "Jalankan ulang backend manual: bash start_android.sh"

@@ -34,8 +34,5 @@ echo "Jalankan update script..."
 export TELEGRAM_SENDER_APP_DIR="$APP_DIR"
 bash "$TMP_SCRIPT"
 
-if command -v pm2 >/dev/null 2>&1; then
-  HOST=0.0.0.0 pm2 restart telegram-backend --update-env || true
-fi
-
 echo "Update script selesai."
+echo "Jalankan ulang backend manual: bash start_android.sh"

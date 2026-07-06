@@ -68,14 +68,14 @@ Buka dari laptop lewat IP HP:
 http://IP_HP:5174
 ```
 
-Biar proses lebih tahan jalan di background:
+Biar proses lebih tahan selama Termux tetap hidup:
 
 ```bash
 termux-wake-lock
-npm install -g pm2
-HOST=0.0.0.0 pm2 start server.js --name telegram-backend
-pm2 save
+bash start_android.sh
 ```
+
+Kalau mau berhenti, tekan `CTRL+C`.
 
 ## Update Online Android
 
