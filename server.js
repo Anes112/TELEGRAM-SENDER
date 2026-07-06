@@ -663,16 +663,26 @@ async function waitAfterSendError(error, normalDelaySeconds, mode) {
 async function detectGroups(accountId) {
   const account = getAccount(accountId);
   const client = await ensureAuthorizedClient(account.id);
-  const dialogs = await client.getDialogs({ limit: 500 });
-  const groups = [];
-  for (const dialog of dialogs) {
-    const entity = dialog.entity;
-    const ok = entity && (entity.className === "Chat" || (entity.className === "Channel" && (entity.megagroup || entity.broadcast)));
-    if (!ok) continue;
-    const item = displayGroup(entity, account);
-    if (item) groups.push({ ...item, dialogFolderId: dialog.folderId ? String(dialog.folderId) : "" });
-  }
-  return groups.sort((a, b) => a.title.localeCompare(b.title));
+  const groups = new Map();
+  const scanDialogs = async (options) => {
+    for await (const dialog of client.iterDialogs(options)) {
+      const entity = dialog.entity;
+      const ok = entity && (entity.className === "Chat" || (entity.className === "Channel" && (entity.megagroup || entity.broadcast)));
+      if (!ok) continue;
+      const item = displayGroup(entity, account);
+      if (!item) continue;
+      const key = `${item.accountId}:${groupBaseId(item.id)}`;
+      const existing = groups.get(key) || {};
+      groups.set(key, {
+        ...existing,
+        ...item,
+        dialogFolderId: dialog.folderId ? String(dialog.folderId) : (existing.dialogFolderId || "")
+      });
+    }
+  };
+  await scanDialogs({ limit: 5000 });
+  await scanDialogs({ limit: 5000, archived: true });
+  return Array.from(groups.values()).sort((a, b) => a.title.localeCompare(b.title));
 }
 
 async function detectFolders(accountId) {
