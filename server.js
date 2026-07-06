@@ -10,6 +10,7 @@ const DATA_DIR = path.join(ROOT, "data");
 const SESSIONS_DIR = path.join(DATA_DIR, "sessions");
 const AVATARS_DIR = path.join(DATA_DIR, "avatars");
 const DB_PATH = path.join(DATA_DIR, "db.json");
+const APP_VERSION_PATH = path.join(ROOT, "APP_VERSION");
 const PUBLIC_DIR = path.join(ROOT, "public");
 const ACTIVITY_GATE_RECHECK_SECONDS = 600;
 fs.mkdirSync(SESSIONS_DIR, { recursive: true });
@@ -31,6 +32,14 @@ function loadEnvFile() {
 }
 
 loadEnvFile();
+
+function appVersion() {
+  try {
+    return fs.readFileSync(APP_VERSION_PATH, "utf8").trim();
+  } catch {
+    return "dev";
+  }
+}
 
 const defaultDb = {
   accounts: [],
@@ -1385,6 +1394,8 @@ app.get("/api/status", async (req, res) => {
   }
   res.json({
     ...db,
+    appVersion: appVersion(),
+    detectGroupsMode: "fullscan-5000-normal-archived",
     accounts,
     groqReady: Boolean(process.env.GROQ_API_KEY),
     isSending: anySending(),

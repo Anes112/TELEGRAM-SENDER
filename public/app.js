@@ -270,6 +270,7 @@ function renderStatus() {
     `Grup aktif: ${enabledGroups}/${state.status.selectedGroups.length}. Folder grup aktif: ${enabledFolderGroups}/${state.status.selectedFolderGroups?.length || 0}. Admin aktif: ${enabledAdmins}/${state.status.selectedAdmins.length}. ` +
     `Pengirim grup: ${groupSender}. Pengirim folder: ${folderSender}. Pengirim admin: ${adminSender}. ` +
     `Kondisi: ${activeBlasts ? `${activeBlasts} jalur sedang mengirim` : "idle"}. ` +
+    `Versi: ${state.status.appVersion || "dev"} (${state.status.detectGroupsMode || "default"}). ` +
     `Status: ${state.status.lastStatus || "-"}`;
   renderBlastIndicator();
 }

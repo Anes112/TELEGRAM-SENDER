@@ -55,4 +55,7 @@ cd "$APP_DIR"
 npm install --omit=dev
 
 echo "Update selesai."
+if [ -f "$APP_DIR/APP_VERSION" ]; then
+  echo "Versi app: $(cat "$APP_DIR/APP_VERSION")"
+fi
 echo "Jalankan ulang backend manual: bash start_android.sh"
