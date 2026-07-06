@@ -11,8 +11,7 @@ const state = {
   selectedFolderId: "",
   activeView: "dashboard",
   notifiedFailures: new Set(),
-  initialStatusLoaded: false,
-  intervalsDirty: false
+  initialStatusLoaded: false
 };
 
 const $ = (id) => document.getElementById(id);
@@ -111,7 +110,6 @@ async function refreshStatus(keepForm = true) {
   if (!keepForm) fillFromStatus();
   renderStatus();
   renderTargets();
-  if (!state.intervalsDirty && !intervalEditorActive()) renderIntervals();
   renderProgress();
   renderLog();
   if (state.initialStatusLoaded) notifyNewFailures();
@@ -135,7 +133,6 @@ async function refreshProgressOnly() {
   state.status.cancelSendRequested = Boolean(progress.cancelSendRequested);
   notifyNewFailures();
   renderStatus();
-  if (!state.intervalsDirty) renderIntervals();
   renderProgress();
   renderLog();
 }
@@ -389,59 +386,6 @@ function preselectSavedFolderGroups(accountId) {
   }
 }
 
-function intervalRow(item, kind) {
-  return `
-    <div class="intervalRow" data-kind="${kind}" data-key="${escapeHtml(keyOf(item))}">
-      <div><b>${escapeHtml(item.title || item.name)}</b><div class="targetMeta">${escapeHtml(item.accountLabel || item.accountId)} · next: ${fmtDate(item.nextRunAt)}</div></div>
-      <input class="intervalInput" type="number" min="5" step="1" value="${Number(item.intervalSeconds || 3600)}">
-      <label class="checkline"><input class="enabledInput" type="checkbox" ${item.enabled !== false ? "checked" : ""}> Aktif</label>
-      <div class="targetMeta">${escapeHtml(item.lastStatus || "-")} · last: ${fmtDate(item.lastRunAt)}</div>
-    </div>`;
-}
-
-function intervalRowV2(item, kind) {
-  const isAdmin = kind === "admins";
-  const customMessage = kind === "groups" || kind === "folderGroups"
-    ? `<textarea class="customMessageInput" placeholder="Teks khusus grup ini. Kosongkan kalau mau forward dari channel default.">${escapeHtml(item.customMessage || "")}</textarea>`
-    : "";
-  const activityGate = kind === "groups" || kind === "folderGroups"
-    ? `<div class="targetGateControls">
-        <label class="checkline"><input class="activityGateInput" type="checkbox" ${item.activityGateEnabled ? "checked" : ""}> Gate</label>
-        <input class="activityGateMinInput" type="number" min="1" max="50" step="1" value="${Number(item.activityGateMinMessages || 10)}" title="Minimal chat baru">
-      </div>`
-    : "";
-  return `
-    <div class="intervalRow" data-kind="${kind}" data-key="${escapeHtml(keyOf(item))}">
-      <div><b>${escapeHtml(item.title || item.name)}</b><div class="targetMeta">${escapeHtml(item.accountLabel || item.accountId)} - next: ${fmtDate(item.nextRunAt)}</div></div>
-      <div>
-        <input class="intervalInput" type="number" min="${isAdmin ? 1 : 5}" step="1" value="${isAdmin ? secondsToDays(item.intervalSeconds || 86400) : Number(item.intervalSeconds || 3600)}" title="${isAdmin ? "Interval hari" : "Interval detik"}">
-        <div class="targetMeta">${isAdmin ? "hari" : "detik"}</div>
-      </div>
-      <label class="checkline"><input class="enabledInput" type="checkbox" ${item.enabled !== false ? "checked" : ""}> Aktif</label>
-      ${activityGate}
-      <div>
-        <div class="targetMeta">${escapeHtml(item.lastStatus || "-")} - last: ${fmtDate(item.lastRunAt)}</div>
-        ${customMessage}
-      </div>
-    </div>`;
-}
-
-function renderIntervals() {
-  $("groupIntervals").innerHTML = state.status.selectedGroups.length
-    ? state.status.selectedGroups.map((item) => intervalRowV2(item, "groups")).join("")
-    : `<div class="miniItem">Belum ada grup tersimpan.</div>`;
-  $("folderGroupIntervals").innerHTML = (state.status.selectedFolderGroups || []).length
-    ? state.status.selectedFolderGroups.map((item) => intervalRowV2(item, "folderGroups")).join("")
-    : `<div class="miniItem">Belum ada grup folder tersimpan.</div>`;
-  $("adminIntervals").innerHTML = state.status.selectedAdmins.length
-    ? state.status.selectedAdmins.map((item) => intervalRowV2(item, "admins")).join("")
-    : `<div class="miniItem">Belum ada admin tersimpan.</div>`;
-}
-
-function intervalEditorActive() {
-  return Boolean(document.activeElement?.closest?.("#groupIntervals, #folderGroupIntervals, #adminIntervals"));
-}
-
 function blastState(item) {
   if (String(item.lastStatus || "").startsWith("SENDING")) return "sending";
   if (String(item.lastStatus || "").startsWith("OK")) return "sent";
@@ -619,7 +563,8 @@ function mergeDetectedWithSaved(item, saved) {
     type: item.type || saved.type || "",
     accountLabel: item.accountLabel || saved.accountLabel || "",
     folderId: item.folderId || saved.folderId || "",
-    folderTitle: item.folderTitle || saved.folderTitle || ""
+    folderTitle: item.folderTitle || saved.folderTitle || "",
+    enabled: true
   };
 }
 
@@ -658,7 +603,7 @@ bind("saveAdminsBtn", async () => {
   const savedMap = new Map((state.status.selectedAdmins || []).map((item) => [keyOf(item), item]));
   const selected = state.detectedAdmins
     .filter((item) => state.selectedAdminKeys.has(keyOf(item)))
-    .map((item) => ({ ...savedMap.get(keyOf(item)), ...item }));
+    .map((item) => ({ ...savedMap.get(keyOf(item)), ...item, enabled: true }));
   await api("/api/admins/selected", { method: "POST", body: JSON.stringify({ admins: selected }) });
   toast(`${selected.length} admin/owner disimpan.`);
   await refreshStatus();
@@ -786,47 +731,11 @@ bind("resetDatabaseBtn", async () => {
   state.selectedGroupKeys.clear();
   state.selectedFolderGroupKeys.clear();
   state.selectedAdminKeys.clear();
-  state.intervalsDirty = false;
   toast(result.backupFile ? `Database direset. Backup: ${result.backupFile}` : "Database direset.");
   await refreshStatus();
 });
 
-bind("saveTargetIntervalsBtn", async () => {
-  await saveAllIntervals();
-  toast("Interval target disimpan.");
-  await refreshStatus();
-});
-
-async function saveAllIntervals() {
-  await saveIntervals("groups");
-  await saveIntervals("folderGroups");
-  await saveIntervals("admins");
-  state.intervalsDirty = false;
-}
-
-async function saveIntervals(kind) {
-  const rows = Array.from(document.querySelectorAll(`.intervalRow[data-kind="${kind}"]`));
-  const source = kind === "admins" ? state.status.selectedAdmins : kind === "folderGroups" ? (state.status.selectedFolderGroups || []) : state.status.selectedGroups;
-  const byKey = new Map(source.map((item) => [keyOf(item), item]));
-  const targets = rows.map((row) => {
-    const item = byKey.get(row.dataset.key);
-    if (!item) return null;
-    return {
-      ...item,
-      intervalSeconds: kind === "admins" ? Math.max(1, Number(row.querySelector(".intervalInput").value)) * 86400 : Number(row.querySelector(".intervalInput").value),
-      enabled: row.querySelector(".enabledInput").checked,
-      activityGateEnabled: row.querySelector(".activityGateInput")?.checked,
-      activityGateMinMessages: Number(row.querySelector(".activityGateMinInput")?.value || item.activityGateMinMessages || 10),
-      customMessage: row.querySelector(".customMessageInput")?.value || "",
-      resetNextRun: true
-    };
-  }).filter(Boolean);
-  await api("/api/targets/update", { method: "POST", body: JSON.stringify({ kind, targets }) });
-}
-
 bind("sendGroupsNowBtn", async () => {
-  await saveIntervals("groups");
-  state.intervalsDirty = false;
   await api("/api/settings/groups", {
     method: "POST",
     body: JSON.stringify({
@@ -847,8 +756,6 @@ bind("sendGroupsNowBtn", async () => {
 });
 
 bind("sendFolderGroupsNowBtn", async () => {
-  await saveIntervals("folderGroups");
-  state.intervalsDirty = false;
   await api("/api/settings/folder-groups", {
     method: "POST",
     body: JSON.stringify({
@@ -869,8 +776,6 @@ bind("sendFolderGroupsNowBtn", async () => {
 });
 
 bind("sendAdminsNowBtn", async () => {
-  await saveIntervals("admins");
-  state.intervalsDirty = false;
   await api("/api/settings/admins", {
     method: "POST",
     body: JSON.stringify({
@@ -937,12 +842,6 @@ $("folderSelect").addEventListener("change", () => {
 });
 $("folderGroupSearch").addEventListener("input", renderFolders);
 $("adminSearch").addEventListener("input", renderTargets);
-["input", "change"].forEach((eventName) => {
-  $("groupIntervals").addEventListener(eventName, () => { state.intervalsDirty = true; });
-  $("folderGroupIntervals").addEventListener(eventName, () => { state.intervalsDirty = true; });
-  $("adminIntervals").addEventListener(eventName, () => { state.intervalsDirty = true; });
-});
-
 initNavigation();
 refreshStatus(false).catch((error) => toast(error.message));
 setInterval(() => refreshProgressOnly().catch(() => {}), 3000);

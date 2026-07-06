@@ -154,7 +154,7 @@ function applyDefaultInterval(targets, newDefault, oldDefault, options = {}) {
   const previousInterval = Number(oldDefault || 0);
   return (Array.isArray(targets) ? targets : []).map((target) => {
     const current = Number(target.intervalSeconds || 0);
-    const shouldUseDefault = !current || current === previousInterval || (options.forceBelow && current < options.forceBelow);
+    const shouldUseDefault = options.force || !current || current === previousInterval || (options.forceBelow && current < options.forceBelow);
     return shouldUseDefault ? { ...target, intervalSeconds: nextInterval, nextRunAt: null } : target;
   });
 }
@@ -886,7 +886,7 @@ function modeConfig(db, mode) {
 
 function targetPayloadReady(target, config) {
   if (config.mode === "admins") return Boolean(String(config.forwardLink || "").trim() || String(config.message || "").trim());
-  return Boolean(String(target.customMessage || "").trim() || String(config.forwardLink || "").trim() || String(config.message || "").trim());
+  return Boolean(String(config.forwardLink || "").trim() || String(config.message || "").trim());
 }
 
 function validateStartReady(db, mode) {
@@ -1005,13 +1005,12 @@ async function groqActivityReview(config, target, messages, deterministicCount, 
 
 async function checkActivityGate(client, target, senderAccountId, config) {
   if (!config.activityGateEnabled) return { allowed: true };
-  const targetGateEnabled = target.activityGateEnabled !== false;
-  if (!targetGateEnabled || config.mode === "admins") return { allowed: true };
+  if (config.mode === "admins") return { allowed: true };
   const lastRunAt = targetLastRunMs(target);
   const lastMessageId = Number(target.lastMessageId || 0);
   if (!lastRunAt && !lastMessageId) return { allowed: true };
 
-  const minMessages = Math.max(1, Math.min(50, Number(target.activityGateMinMessages || config.activityGateMinMessages || 10)));
+  const minMessages = Math.max(1, Math.min(50, Number(config.activityGateMinMessages || 10)));
   const peer = peerForSender(target, senderAccountId);
   const limit = Math.max(80, Math.min(200, minMessages + 80));
   const messages = await client.getMessages(peer, { limit });
@@ -1067,11 +1066,6 @@ function sentMessageMeta(result) {
 
 async function sendTargetPayload(client, target, senderAccountId, config) {
   const peer = peerForSender(target, senderAccountId);
-  const customMessage = String(target.customMessage || "").trim();
-  if (config.mode !== "admins" && customMessage) {
-    const sent = await client.sendMessage(peer, { message: customMessage });
-    return { type: "teks custom", ...sentMessageMeta(sent) };
-  }
   if (String(config.forwardLink || "").trim()) {
     const forward = parseTelegramMessageLink(config.forwardLink);
     const sent = await client.forwardMessages(peer, { messages: forward.messageId, fromPeer: forward.fromPeer });
@@ -1559,15 +1553,15 @@ app.post("/api/groups/selected", (req, res) => {
     title: String(group.title || group.id),
     username: String(group.username || ""),
     type: String(group.type || ""),
-    intervalSeconds: Math.max(5, Number(group.intervalSeconds || db.groupDefaultIntervalSeconds || db.defaultIntervalSeconds || 3600)),
-    enabled: group.enabled !== false,
+    intervalSeconds: Math.max(5, Number(db.groupDefaultIntervalSeconds || db.defaultIntervalSeconds || 3600)),
+    enabled: true,
     nextRunAt: group.nextRunAt || null,
     lastRunAt: group.lastRunAt || null,
     lastMessageId: group.lastMessageId || null,
     lastStatus: group.lastStatus || "",
-    customMessage: String(group.customMessage || ""),
-    activityGateEnabled: typeof group.activityGateEnabled === "boolean" ? group.activityGateEnabled : Boolean(db.groupActivityGateEnabled),
-    activityGateMinMessages: Math.max(1, Math.min(50, Number(group.activityGateMinMessages || db.groupActivityGateMinMessages || 10)))
+    customMessage: "",
+    activityGateEnabled: Boolean(db.groupActivityGateEnabled),
+    activityGateMinMessages: Math.max(1, Math.min(50, Number(db.groupActivityGateMinMessages || 10)))
   }));
   saveDb(db);
   res.json({ ok: true, total: db.selectedGroups.length });
@@ -1585,15 +1579,15 @@ app.post("/api/folders/selected", (req, res) => {
     type: String(group.type || ""),
     folderId: String(group.folderId || ""),
     folderTitle: String(group.folderTitle || ""),
-    intervalSeconds: Math.max(5, Number(group.intervalSeconds || db.folderGroupDefaultIntervalSeconds || db.groupDefaultIntervalSeconds || db.defaultIntervalSeconds || 3600)),
-    enabled: group.enabled !== false,
+    intervalSeconds: Math.max(5, Number(db.folderGroupDefaultIntervalSeconds || db.groupDefaultIntervalSeconds || db.defaultIntervalSeconds || 3600)),
+    enabled: true,
     nextRunAt: group.nextRunAt || null,
     lastRunAt: group.lastRunAt || null,
     lastMessageId: group.lastMessageId || null,
     lastStatus: group.lastStatus || "",
-    customMessage: String(group.customMessage || ""),
-    activityGateEnabled: typeof group.activityGateEnabled === "boolean" ? group.activityGateEnabled : Boolean(db.folderGroupActivityGateEnabled),
-    activityGateMinMessages: Math.max(1, Math.min(50, Number(group.activityGateMinMessages || db.folderGroupActivityGateMinMessages || 10)))
+    customMessage: "",
+    activityGateEnabled: Boolean(db.folderGroupActivityGateEnabled),
+    activityGateMinMessages: Math.max(1, Math.min(50, Number(db.folderGroupActivityGateMinMessages || 10)))
   }));
   saveDb(db);
   res.json({ ok: true, total: db.selectedFolderGroups.length });
@@ -1624,13 +1618,13 @@ app.post("/api/admins/selected", (req, res) => {
     role: String(admin.role || "Admin"),
     isBot: false,
     sourceGroups: Array.isArray(admin.sourceGroups) ? admin.sourceGroups.map(String) : [],
-    intervalSeconds: Math.max(5, Number(admin.intervalSeconds || db.adminDefaultIntervalSeconds || db.defaultIntervalSeconds || 3600)),
-    enabled: admin.enabled !== false,
+    intervalSeconds: Math.max(86400, Number(db.adminDefaultIntervalSeconds || 86400)),
+    enabled: true,
     nextRunAt: admin.nextRunAt || null,
     lastRunAt: admin.lastRunAt || null,
     lastMessageId: admin.lastMessageId || null,
     lastStatus: admin.lastStatus || "",
-    customMessage: String(admin.customMessage || "")
+    customMessage: ""
   }));
   db.selectedAdmins = mergeTargets(db.selectedAdmins, mappedAdmins);
   saveDb(db);
@@ -1638,24 +1632,7 @@ app.post("/api/admins/selected", (req, res) => {
 });
 
 app.post("/api/targets/update", (req, res) => {
-  const db = readDb();
-  const kind = req.body.kind === "admins" ? "selectedAdmins" : req.body.kind === "folderGroups" ? "selectedFolderGroups" : "selectedGroups";
-  const updates = new Map((Array.isArray(req.body.targets) ? req.body.targets : []).map((target) => [`${target.accountId}:${target.id}`, target]));
-  db[kind] = db[kind].map((target) => {
-    const update = updates.get(`${target.accountId}:${target.id}`);
-    if (!update) return target;
-    return {
-      ...target,
-      intervalSeconds: Math.max(5, Number(update.intervalSeconds || target.intervalSeconds)),
-      enabled: update.enabled !== false,
-      customMessage: String(update.customMessage ?? target.customMessage ?? ""),
-      activityGateEnabled: typeof update.activityGateEnabled === "boolean" ? update.activityGateEnabled : target.activityGateEnabled,
-      activityGateMinMessages: Math.max(1, Math.min(50, Number(update.activityGateMinMessages || target.activityGateMinMessages || 10))),
-      nextRunAt: update.resetNextRun ? null : target.nextRunAt
-    };
-  });
-  saveDb(db);
-  res.json({ ok: true });
+  res.json({ ok: true, ignored: true, message: "Interval target sudah dihapus. Pakai setting utama." });
 });
 
 app.post("/api/settings", (req, res) => {
@@ -1687,7 +1664,7 @@ app.post("/api/settings/groups", (req, res) => {
   db.groupLoopEnabled = Boolean(req.body.loopEnabled);
   db.groupActivityGateEnabled = Boolean(req.body.activityGateEnabled);
   db.groupActivityGateMinMessages = Math.max(1, Math.min(50, Number(req.body.activityGateMinMessages || db.groupActivityGateMinMessages || 10)));
-  db.selectedGroups = applyDefaultInterval(db.selectedGroups, db.groupDefaultIntervalSeconds, oldDefaultInterval);
+  db.selectedGroups = applyDefaultInterval(db.selectedGroups, db.groupDefaultIntervalSeconds, oldDefaultInterval, { force: true });
   saveDb(db);
   res.json({ ok: true });
 });
@@ -1704,7 +1681,7 @@ app.post("/api/settings/folder-groups", (req, res) => {
   db.folderGroupLoopEnabled = Boolean(req.body.loopEnabled);
   db.folderGroupActivityGateEnabled = Boolean(req.body.activityGateEnabled);
   db.folderGroupActivityGateMinMessages = Math.max(1, Math.min(50, Number(req.body.activityGateMinMessages || db.folderGroupActivityGateMinMessages || 10)));
-  db.selectedFolderGroups = applyDefaultInterval(db.selectedFolderGroups, db.folderGroupDefaultIntervalSeconds, oldDefaultInterval);
+  db.selectedFolderGroups = applyDefaultInterval(db.selectedFolderGroups, db.folderGroupDefaultIntervalSeconds, oldDefaultInterval, { force: true });
   saveDb(db);
   res.json({ ok: true });
 });
@@ -1722,7 +1699,7 @@ app.post("/api/settings/admins", (req, res) => {
   db.adminDelaySeconds = Math.max(0, Number(req.body.delaySeconds ?? db.adminDelaySeconds ?? 1));
   db.adminSchedulerEnabled = Boolean(req.body.schedulerEnabled);
   db.adminLoopEnabled = Boolean(req.body.loopEnabled);
-  db.selectedAdmins = applyDefaultInterval(db.selectedAdmins, db.adminDefaultIntervalSeconds, oldDefaultInterval, { forceBelow: 86400 });
+  db.selectedAdmins = applyDefaultInterval(db.selectedAdmins, db.adminDefaultIntervalSeconds, oldDefaultInterval, { force: true, minSeconds: 86400 });
   saveDb(db);
   res.json({ ok: true });
 });
