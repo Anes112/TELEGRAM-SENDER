@@ -241,6 +241,28 @@ button:disabled { opacity: .58; cursor: wait; }
   margin-top: 12px;
 }
 
+.splitHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.splitHead h3,
+.splitHead p {
+  margin: 0;
+}
+
+.splitHead p {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.splitHead button {
+  flex: 0 0 auto;
+}
+
 .actions input, .listTools input {
   max-width: 300px;
 }

@@ -607,11 +607,26 @@ function mergeByKey(oldItems, newItems) {
   return Array.from(map.values());
 }
 
+function mergeDetectedWithSaved(item, saved) {
+  if (!saved) return item;
+  return {
+    ...item,
+    ...saved,
+    title: item.title || saved.title || item.id,
+    name: item.name || saved.name || item.title || item.id,
+    username: item.username ?? saved.username ?? "",
+    type: item.type || saved.type || "",
+    accountLabel: item.accountLabel || saved.accountLabel || "",
+    folderId: item.folderId || saved.folderId || "",
+    folderTitle: item.folderTitle || saved.folderTitle || ""
+  };
+}
+
 bind("saveGroupsBtn", async () => {
   const savedMap = new Map((state.status.selectedGroups || []).map((item) => [keyOf(item), item]));
   const selected = state.detectedGroups
     .filter((item) => state.selectedGroupKeys.has(keyOf(item)))
-    .map((item) => ({ ...savedMap.get(keyOf(item)), ...item }));
+    .map((item) => mergeDetectedWithSaved(item, savedMap.get(keyOf(item))));
   await api("/api/groups/selected", { method: "POST", body: JSON.stringify({ groups: selected }) });
   toast(`${selected.length} grup disimpan.`);
   await refreshStatus();
@@ -622,7 +637,7 @@ bind("saveFolderGroupsBtn", async () => {
   const folderPool = mergeByKey(state.status.selectedFolderGroups || [], (state.detectedFolders || []).flatMap((folder) => folder.groups || []));
   const selected = folderPool
     .filter((item) => state.selectedFolderGroupKeys.has(keyOf(item)))
-    .map((item) => ({ ...savedMap.get(keyOf(item)), ...item }));
+    .map((item) => mergeDetectedWithSaved(item, savedMap.get(keyOf(item))));
   await api("/api/folders/selected", { method: "POST", body: JSON.stringify({ groups: selected }) });
   toast(`${selected.length} grup folder disimpan.`);
   await refreshStatus();
@@ -761,6 +776,20 @@ bind("saveSystemSettingsBtn", async () => {
   await refreshStatus();
 });
 
+bind("resetDatabaseBtn", async () => {
+  if (!confirm("Reset database aplikasi? Akun login tetap disimpan, tapi target/progress/setting akan dibersihkan.")) return;
+  const result = await api("/api/database/reset", { method: "POST", body: JSON.stringify({ keepAccounts: true }) });
+  state.detectedGroups = [];
+  state.detectedFolders = [];
+  state.detectedAdmins = [];
+  state.selectedGroupKeys.clear();
+  state.selectedFolderGroupKeys.clear();
+  state.selectedAdminKeys.clear();
+  state.intervalsDirty = false;
+  toast(result.backupFile ? `Database direset. Backup: ${result.backupFile}` : "Database direset.");
+  await refreshStatus();
+});
+
 bind("saveTargetIntervalsBtn", async () => {
   await saveAllIntervals();
   toast("Interval target disimpan.");
@@ -795,7 +824,8 @@ async function saveIntervals(kind) {
 }
 
 bind("sendGroupsNowBtn", async () => {
-  await saveAllIntervals();
+  await saveIntervals("groups");
+  state.intervalsDirty = false;
   await api("/api/settings/groups", {
     method: "POST",
     body: JSON.stringify({
@@ -816,7 +846,8 @@ bind("sendGroupsNowBtn", async () => {
 });
 
 bind("sendFolderGroupsNowBtn", async () => {
-  await saveAllIntervals();
+  await saveIntervals("folderGroups");
+  state.intervalsDirty = false;
   await api("/api/settings/folder-groups", {
     method: "POST",
     body: JSON.stringify({
@@ -837,7 +868,8 @@ bind("sendFolderGroupsNowBtn", async () => {
 });
 
 bind("sendAdminsNowBtn", async () => {
-  await saveAllIntervals();
+  await saveIntervals("admins");
+  state.intervalsDirty = false;
   await api("/api/settings/admins", {
     method: "POST",
     body: JSON.stringify({

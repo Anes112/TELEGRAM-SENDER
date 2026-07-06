@@ -183,6 +183,14 @@ function saveDb(db) {
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 }
 
+function backupDbFile(reason = "backup") {
+  if (!fs.existsSync(DB_PATH)) return "";
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const file = path.join(DATA_DIR, `db.${reason}.${stamp}.json`);
+  fs.copyFileSync(DB_PATH, file);
+  return file;
+}
+
 function readDb() {
   const db = { ...structuredClone(defaultDb), ...readJson(DB_PATH, defaultDb) };
   db.accounts = Array.isArray(db.accounts) ? db.accounts : [];
@@ -860,6 +868,30 @@ function modeConfig(db, mode) {
 function targetPayloadReady(target, config) {
   if (config.mode === "admins") return Boolean(String(config.forwardLink || "").trim() || String(config.message || "").trim());
   return Boolean(String(target.customMessage || "").trim() || String(config.forwardLink || "").trim() || String(config.message || "").trim());
+}
+
+function validateStartReady(db, mode) {
+  const config = modeConfig(db, mode);
+  const targets = (db[config.targetType] || []).filter((target) => target.enabled !== false);
+  if (!targets.length) {
+    const hint = mode === "folderGroups"
+      ? "Detect folder, centang grup folder, lalu klik Simpan grup folder."
+      : mode === "groups"
+        ? "Detect grup, centang grup, lalu klik Simpan grup."
+        : "Detect admin/owner, centang kontak, lalu simpan.";
+    return { ok: false, message: `Belum ada ${config.label} aktif. ${hint}` };
+  }
+  if (!targets.some((target) => targetPayloadReady(target, config))) {
+    return {
+      ok: false,
+      message: mode === "folderGroups"
+        ? "Payload folder kosong. Isi link post channel folder, teks fallback folder, atau teks khusus di Interval Folder Grup."
+        : mode === "groups"
+          ? "Payload grup kosong. Isi link post channel grup, teks default grup, atau teks khusus di Interval Grup."
+          : "Payload admin kosong. Isi link forward atau teks kontak."
+    };
+  }
+  return { ok: true };
 }
 
 function telegramDateMs(value) {
@@ -1714,6 +1746,11 @@ function startBackgroundSend(res, mode, label) {
     res.json({ skipped: true, message: `Pengiriman ${label} sedang berjalan.` });
     return;
   }
+  const validation = validateStartReady(readDb(), mode);
+  if (!validation.ok) {
+    res.json({ skipped: true, message: validation.message });
+    return;
+  }
   Promise.resolve()
     .then(() => sendTargets(`manual ${label}`, true, mode))
     .catch((error) => {
@@ -1735,6 +1772,26 @@ app.post("/api/send-folder-groups-now", (req, res) => {
 
 app.post("/api/send-admins-now", (req, res) => {
   startBackgroundSend(res, "admins", "kontak");
+});
+
+app.post("/api/database/reset", (req, res) => {
+  const oldDb = readDb();
+  const backupFile = backupDbFile("reset");
+  blastStates.groups.cancelRequested = true;
+  blastStates.folderGroups.cancelRequested = true;
+  blastStates.admins.cancelRequested = true;
+  const keepAccounts = req.body.keepAccounts !== false;
+  const nextDb = structuredClone(defaultDb);
+  if (keepAccounts) {
+    nextDb.accounts = oldDb.accounts || [];
+    nextDb.activeAccountId = oldDb.activeAccountId || nextDb.accounts[0]?.id || "";
+  }
+  nextDb.lastStatus = backupFile
+    ? `Database direset. Backup: ${path.basename(backupFile)}.`
+    : "Database direset.";
+  addLog(nextDb, nextDb.lastStatus);
+  saveDb(nextDb);
+  res.json({ ok: true, backupFile: backupFile ? path.basename(backupFile) : "", lastStatus: nextDb.lastStatus });
 });
 
 app.post("/api/stop-send", (req, res) => {
